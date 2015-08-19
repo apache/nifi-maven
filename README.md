@@ -25,7 +25,7 @@ Apache NiFi NAR Maven Plugin helps to build NiFi Archive bundles to support the 
 
 ## Requirements
 * JDK 1.7 or higher
-* Apache Maven 3.0.5 or higher
+* Apache Maven 3.1.0 or higher
 
 ## Getting Started
 
