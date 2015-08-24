@@ -38,8 +38,8 @@ the main 'nifi' code tree.
 
 
 ## Getting Help
-If you have questions, you can reach out to our mailing list: dev@nifi.incubator.apache.org
-([archive](http://mail-archives.apache.org/mod_mbox/incubator-nifi-dev)).
+If you have questions, you can reach out to our mailing list: dev@nifi.apache.org
+([archive](http://mail-archives.apache.org/mod_mbox/nifi-dev)).
 We're also often available in IRC: #nifi on
 [irc.freenode.net](http://webchat.freenode.net/?channels=#nifi).
 
