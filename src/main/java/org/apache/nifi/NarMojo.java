@@ -18,6 +18,8 @@ package org.apache.nifi;
 
 import java.io.File;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -81,6 +83,8 @@ public class NarMojo extends AbstractMojo {
 
     private static final String[] DEFAULT_EXCLUDES = new String[]{"**/package.html"};
     private static final String[] DEFAULT_INCLUDES = new String[]{"**/**"};
+
+    private static final String BUILD_TIMESTAMP_FORMAT = "yyyy-MM-dd'T'HH:mm:ss'Z'";
 
     /**
      * POM
@@ -359,6 +363,15 @@ public class NarMojo extends AbstractMojo {
     @Parameter(property = "outputAbsoluteArtifactFilename", defaultValue = "false", required = false)
     protected boolean outputAbsoluteArtifactFilename;
 
+    @Parameter(property = "buildTag", defaultValue = "${project.scm.tag}", required = false)
+    protected String buildTag;
+
+    @Parameter(property = "buildBranch", defaultValue = "${buildBranch}", required = false)
+    protected String buildBranch;
+
+    @Parameter(property = "buildRevision", defaultValue = "${buildRevision}", required = false)
+    protected String buildRevision;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         copyDependencies();
@@ -542,20 +555,43 @@ public class NarMojo extends AbstractMojo {
                 archive.setManifestFile(existingManifest);
             }
 
-            // automatically add the artifact id to the manifest
+            // automatically add the artifact id, group id, and version to the manifest
             archive.addManifestEntry("Nar-Id", project.getArtifactId());
+            archive.addManifestEntry("Nar-Group", project.getGroupId());
+            archive.addManifestEntry("Nar-Version", project.getVersion());
 
             // look for a nar dependency
-            String narDependency = getNarDependency();
+            NarDependency narDependency = getNarDependency();
             if (narDependency != null) {
-                archive.addManifestEntry("Nar-Dependency-Id", narDependency);
+                archive.addManifestEntry("Nar-Dependency-Id", narDependency.getArtifactId());
+                archive.addManifestEntry("Nar-Dependency-Group", narDependency.getGroupId());
+                archive.addManifestEntry("Nar-Dependency-Version", narDependency.getVersion());
             }
+
+            // add build information when available
+
+            if (notEmpty(buildTag)) {
+                archive.addManifestEntry("Build-Tag", buildTag);
+            }
+            if (notEmpty(buildBranch)) {
+                archive.addManifestEntry("Build-Branch", buildBranch);
+            }
+            if (notEmpty(buildRevision)) {
+                archive.addManifestEntry("Build-Revision", buildRevision);
+            }
+
+            SimpleDateFormat dateFormat = new SimpleDateFormat(BUILD_TIMESTAMP_FORMAT);
+            archive.addManifestEntry("Build-Timestamp", dateFormat.format(new Date()));
 
             archiver.createArchive(session, project, archive);
             return narFile;
         } catch (ArchiverException | MojoExecutionException | ManifestException | IOException | DependencyResolutionRequiredException e) {
             throw new MojoExecutionException("Error assembling NAR", e);
         }
+    }
+
+    private boolean notEmpty(String value) {
+        return value != null && !value.isEmpty();
     }
 
     private String[] getIncludes() {
@@ -582,8 +618,8 @@ public class NarMojo extends AbstractMojo {
         return new File(basedir, finalName + classifier + ".nar");
     }
 
-    private String getNarDependency() throws MojoExecutionException {
-        String narDependency = null;
+    private NarDependency getNarDependency() throws MojoExecutionException {
+        NarDependency narDependency = null;
 
         // get nar dependencies
         FilterArtifacts filter = new FilterArtifacts();
@@ -605,9 +641,36 @@ public class NarMojo extends AbstractMojo {
                     + "used as the parent of this NAR's ClassLoader. As a result, only a single NAR dependency is allowed.");
         } else if (artifacts.size() == 1) {
             final Artifact artifact = (Artifact) artifacts.iterator().next();
-            narDependency = artifact.getArtifactId();
+
+            narDependency = new NarDependency(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion());
         }
 
         return narDependency;
     }
+
+    private static class NarDependency {
+
+        final String groupId;
+        final String artifactId;
+        final String version;
+
+        public NarDependency(String groupId, String artifactId, String version) {
+            this.groupId = groupId;
+            this.artifactId = artifactId;
+            this.version = version;
+        }
+
+        public String getGroupId() {
+            return groupId;
+        }
+
+        public String getArtifactId() {
+            return artifactId;
+        }
+
+        public String getVersion() {
+            return version;
+        }
+    }
+
 }
