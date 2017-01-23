@@ -16,10 +16,6 @@
  */
 package org.apache.nifi;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.Map;
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.handler.ArtifactHandler;
 import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
@@ -27,13 +23,13 @@ import org.apache.maven.artifact.repository.ArtifactRepository;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
-import org.apache.maven.project.MavenProject;
-import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.project.DefaultProjectBuildingRequest;
+import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.ProjectBuilder;
 import org.apache.maven.project.ProjectBuildingException;
 import org.apache.maven.project.ProjectBuildingRequest;
@@ -43,6 +39,11 @@ import org.apache.maven.shared.dependency.tree.DependencyTreeBuilder;
 import org.apache.maven.shared.dependency.tree.DependencyTreeBuilderException;
 import org.apache.maven.shared.dependency.tree.traversal.DependencyNodeVisitor;
 import org.eclipse.aether.RepositorySystemSession;
+
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Generates the listing of dependencies that is provided by the NAR dependency of the current NAR. This is important as artifacts that bundle dependencies will
@@ -126,6 +127,7 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
             // build the project for the nar artifact
             final ProjectBuildingRequest narRequest = new DefaultProjectBuildingRequest();
             narRequest.setRepositorySession(repoSession);
+            narRequest.setSystemProperties(System.getProperties());
             final ProjectBuildingResult narResult = projectBuilder.build(narArtifact, narRequest);
 
             // get the artifact handler for excluding dependencies
