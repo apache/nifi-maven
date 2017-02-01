@@ -363,6 +363,52 @@ public class NarMojo extends AbstractMojo {
     @Parameter(property = "outputAbsoluteArtifactFilename", defaultValue = "false", required = false)
     protected boolean outputAbsoluteArtifactFilename;
 
+    /* The values to use for populating the Nar-Group, Nar-Id, and Nar-Version in the MANIFEST file. By default
+     * these values will be set to the standard Maven project equivalents, but they may be overridden through properties.
+     *
+     * For example if the pom.xml for the nifi-test-nar contained the following:
+     *
+     *    <groupId>org.apache.nifi</groupId>
+     *    <artifactId>nifi-test-nar</artifactId>
+     *    <version>1.0</version>
+     *
+     *    <properties>
+     *       <narGroup>org.apache.nifi.overridden</narGroup>
+     *       <narId>nifi-overridden-test-nar</narId>
+     *       <narVersion>2.0</narVersion>
+     *   </properties>
+     *
+     * It would produce a MANIFEST with:
+     *
+     *   Nar-Id: nifi-overridden-test-nar
+     *   Nar-Group: org.apache.nifi.overridden
+     *   Nar-Version: 2.0
+     *
+    */
+
+    @Parameter(property = "narGroup", defaultValue = "${project.groupId}", required = true)
+    protected String narGroup;
+
+    @Parameter(property = "narId", defaultValue = "${project.artifactId}", required = true)
+    protected String narId;
+
+    @Parameter(property = "narVersion", defaultValue = "${project.version}", required = true)
+    protected String narVersion;
+
+    @Parameter(property = "narDependencyGroup", required = false)
+    protected String narDependencyGroup = null;
+
+    @Parameter(property = "narDependencyId", required = false)
+    protected String narDependencyId = null;
+
+    @Parameter(property = "narDependencyVersion", required = false)
+    protected String narDependencyVersion = null;
+
+
+    /**
+     * Build info to be populated in MANIFEST.
+     */
+
     @Parameter(property = "buildTag", defaultValue = "${project.scm.tag}", required = false)
     protected String buildTag;
 
@@ -556,16 +602,20 @@ public class NarMojo extends AbstractMojo {
             }
 
             // automatically add the artifact id, group id, and version to the manifest
-            archive.addManifestEntry("Nar-Id", project.getArtifactId());
-            archive.addManifestEntry("Nar-Group", project.getGroupId());
-            archive.addManifestEntry("Nar-Version", project.getVersion());
+            archive.addManifestEntry("Nar-Id", narId);
+            archive.addManifestEntry("Nar-Group", narGroup);
+            archive.addManifestEntry("Nar-Version", narVersion);
 
             // look for a nar dependency
             NarDependency narDependency = getNarDependency();
             if (narDependency != null) {
-                archive.addManifestEntry("Nar-Dependency-Id", narDependency.getArtifactId());
-                archive.addManifestEntry("Nar-Dependency-Group", narDependency.getGroupId());
-                archive.addManifestEntry("Nar-Dependency-Version", narDependency.getVersion());
+                final String narDependencyGroup = notEmpty(this.narDependencyGroup) ? this.narDependencyGroup : narDependency.getGroupId();
+                final String narDependencyId = notEmpty(this.narDependencyId) ? this.narDependencyId : narDependency.getArtifactId();
+                final String narDependencyVersion = notEmpty(this.narDependencyVersion) ? this.narDependencyVersion : narDependency.getVersion();
+
+                archive.addManifestEntry("Nar-Dependency-Group", narDependencyGroup);
+                archive.addManifestEntry("Nar-Dependency-Id", narDependencyId);
+                archive.addManifestEntry("Nar-Dependency-Version", narDependencyVersion);
             }
 
             // add build information when available
