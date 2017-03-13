@@ -418,6 +418,14 @@ public class NarMojo extends AbstractMojo {
     @Parameter(property = "buildRevision", defaultValue = "${buildRevision}", required = false)
     protected String buildRevision;
 
+    /**
+     * Allows a NAR to specify if it's resources should be cloned when a component that depends on this NAR
+     * is performing class loader isolation.
+     */
+    @Parameter(property = "cloneDuringInstanceClassLoading", defaultValue = "false", required = false)
+    protected boolean cloneDuringInstanceClassLoading;
+
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         copyDependencies();
@@ -632,6 +640,8 @@ public class NarMojo extends AbstractMojo {
 
             SimpleDateFormat dateFormat = new SimpleDateFormat(BUILD_TIMESTAMP_FORMAT);
             archive.addManifestEntry("Build-Timestamp", dateFormat.format(new Date()));
+
+            archive.addManifestEntry("Clone-During-Instance-Class-Loading", String.valueOf(cloneDuringInstanceClassLoading));
 
             archiver.createArchive(session, project, archive);
             return narFile;
