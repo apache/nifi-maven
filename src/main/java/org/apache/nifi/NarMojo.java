@@ -112,6 +112,11 @@ public class NarMojo extends AbstractMojo {
      */
     @Parameter(alias = "narName", property = "nar.finalName", defaultValue = "${project.build.finalName}", required = true)
     protected String finalName;
+    /**
+     * Name of the prefix for package identifiers like Nar-Id, where Nar is the identifier
+     */
+    @Parameter(alias = "packageIDPrefix", property = "nar.packageIDPrefix", defaultValue = "Nar", required = true)
+    protected String packageIDPrefix;
 
     /**
      * The Jar archiver.
@@ -480,8 +485,8 @@ public class NarMojo extends AbstractMojo {
         filter.addFilter(new GroupIdFilter(this.includeGroupIds, this.excludeGroupIds));
         filter.addFilter(new ArtifactIdFilter(this.includeArtifactIds, this.excludeArtifactIds));
 
-        // explicitly filter our nar dependencies
-        filter.addFilter(new TypeFilter("", "nar"));
+        // explicitly filter our nar dependencies as defined by type
+        filter.addFilter(new TypeFilter("", type));
 
         // start with all artifacts.
         Set artifacts = project.getArtifacts();
@@ -610,9 +615,9 @@ public class NarMojo extends AbstractMojo {
             }
 
             // automatically add the artifact id, group id, and version to the manifest
-            archive.addManifestEntry("Nar-Id", narId);
-            archive.addManifestEntry("Nar-Group", narGroup);
-            archive.addManifestEntry("Nar-Version", narVersion);
+            archive.addManifestEntry(packageIDPrefix + "-Id", narId);
+            archive.addManifestEntry(packageIDPrefix + "-Group", narGroup);
+            archive.addManifestEntry(packageIDPrefix + "-Version", narVersion);
 
             // look for a nar dependency
             NarDependency narDependency = getNarDependency();
@@ -621,9 +626,9 @@ public class NarMojo extends AbstractMojo {
                 final String narDependencyId = notEmpty(this.narDependencyId) ? this.narDependencyId : narDependency.getArtifactId();
                 final String narDependencyVersion = notEmpty(this.narDependencyVersion) ? this.narDependencyVersion : narDependency.getVersion();
 
-                archive.addManifestEntry("Nar-Dependency-Group", narDependencyGroup);
-                archive.addManifestEntry("Nar-Dependency-Id", narDependencyId);
-                archive.addManifestEntry("Nar-Dependency-Version", narDependencyVersion);
+                archive.addManifestEntry(packageIDPrefix + "-Dependency-Group", narDependencyGroup);
+                archive.addManifestEntry(packageIDPrefix + "-Dependency-Id", narDependencyId);
+                archive.addManifestEntry(packageIDPrefix + "-Dependency-Version", narDependencyVersion);
             }
 
             // add build information when available
@@ -675,7 +680,7 @@ public class NarMojo extends AbstractMojo {
             classifier = "-" + classifier;
         }
 
-        return new File(basedir, finalName + classifier + ".nar");
+        return new File(basedir, finalName + classifier + "." + type );
     }
 
     private NarDependency getNarDependency() throws MojoExecutionException {
@@ -683,7 +688,7 @@ public class NarMojo extends AbstractMojo {
 
         // get nar dependencies
         FilterArtifacts filter = new FilterArtifacts();
-        filter.addFilter(new TypeFilter("nar", ""));
+        filter.addFilter(new TypeFilter(type, ""));
 
         // start with all artifacts.
         Set artifacts = project.getArtifacts();

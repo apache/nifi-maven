@@ -37,6 +37,31 @@ the main 'nifi' code tree.
   go to the [nifi](../nifi) directory and follow its instructions. 
 
 
+## Settings and configuration
+
+There are several properties that can be set to change the behavior of this plugin.
+Two of special interest are:
+
+####type
+type defines the type of archive to be produced and evaluated for special dependencies.  The default type is nar.  This property should be changed if you have need to 
+customize the file extension of archives produced by this plugin.  This plugin will build archives with .nar extentions, and look for othe .nar dependencies by definition.
+Changing this value, for example to 'foo', will have the effect of having the plugin produce archives with .foo as the extension, and look for .foo files
+as nar dependencies.
+ 
+####packageIDPrefix 
+The archives produced by this plugin have the following entries added to the manifest ( where packageIDPrefix defaults to 'Nar'):
+
+-  {packageIDPrefix}-Id
+-  {packageIDPrefix}-Group
+-  {packageIDPrefix}-Version
+-  {packageIDPrefix}-Dependency-Group
+-  {packageIDPrefix}-Dependency-Id
+-  {packageIDPrefix}-Dependency-Version
+
+This property can be used to change the name of these manifest entries
+
+ 
+
 ## Getting Help
 If you have questions, you can reach out to our mailing list: dev@nifi.apache.org
 ([archive](http://mail-archives.apache.org/mod_mbox/nifi-dev)).
