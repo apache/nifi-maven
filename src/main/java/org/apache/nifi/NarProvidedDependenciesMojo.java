@@ -53,8 +53,6 @@ import java.util.Map;
 @Mojo(name = "provided-nar-dependencies", defaultPhase = LifecyclePhase.PACKAGE, threadSafe = false, requiresDependencyResolution = ResolutionScope.RUNTIME)
 public class NarProvidedDependenciesMojo extends AbstractMojo {
 
-    private static final String NAR = "nar";
-
     /**
      * The Maven project.
      */
@@ -79,6 +77,15 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
      */
     @Parameter(property = "mode", defaultValue = "tree")
     private String mode;
+
+    /**
+     * The type we are using for dependencies, should be nar, but may
+     * be changed in the configuration if the plugin is producing
+     * other archive extensions, this is a 'shared' configuration
+     * with the NarMojo
+     */
+    @Parameter(property = "type", required = false, defaultValue = "nar")
+    protected String type;
 
     /**
      * The dependency tree builder to use for verbose output.
@@ -108,7 +115,7 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
             // find the nar dependency
             Artifact narArtifact = null;
             for (final Artifact artifact : project.getDependencyArtifacts()) {
-                if (NAR.equals(artifact.getType())) {
+                if (type.equals(artifact.getType())) {
                     // ensure the project doesn't have two nar dependencies
                     if (narArtifact != null) {
                         throw new MojoExecutionException("Project can only have one NAR dependency.");
@@ -141,7 +148,7 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
             // will be used as the parent classloader for this nar and seeing what
             // dependencies are provided is critical.
             final Map<String, ArtifactHandler> narHandlerMap = new HashMap<>();
-            narHandlerMap.put(NAR, narHandler);
+            narHandlerMap.put(type, narHandler);
             artifactHandlerManager.addHandlers(narHandlerMap);
 
             // get the dependency tree
@@ -294,7 +301,7 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
             }
 
             final Artifact artifact = node.getArtifact();
-            if (!NAR.equals(artifact.getType())) {
+            if (!type.equals(artifact.getType())) {
                 output.append("<dependency>\n");
                 output.append("    <groupId>").append(artifact.getGroupId()).append("</groupId>\n");
                 output.append("    <artifactId>").append(artifact.getArtifactId()).append("</artifactId>\n");
