@@ -58,7 +58,9 @@ The archives produced by this plugin have the following entries added to the man
 -  {packageIDPrefix}-Dependency-Id
 -  {packageIDPrefix}-Dependency-Version
 
-This property can be used to change the name of these manifest entries
+This property can be used to change the name of these manifest entries.  One convention being to continue as the original by capitalizing the
+type, such as:
+Nar to nar
 
  
 
