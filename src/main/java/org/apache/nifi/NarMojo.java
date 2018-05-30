@@ -702,7 +702,7 @@ public class NarMojo extends AbstractMojo {
         } else if (artifacts.size() == 1) {
             final Artifact artifact = (Artifact) artifacts.iterator().next();
 
-            narDependency = new NarDependency(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion());
+            narDependency = new NarDependency(artifact.getGroupId(), artifact.getArtifactId(), artifact.getBaseVersion());
         }
 
         return narDependency;
