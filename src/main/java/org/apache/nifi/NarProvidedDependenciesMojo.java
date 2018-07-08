@@ -50,7 +50,7 @@ import java.util.Map;
  * not project those dependences using the traditional maven dependency plugin. This plugin will override that setting in order to print the dependencies being
  * inherited at runtime.
  */
-@Mojo(name = "provided-nar-dependencies", defaultPhase = LifecyclePhase.PACKAGE, threadSafe = false, requiresDependencyResolution = ResolutionScope.RUNTIME)
+@Mojo(name = "provided-nar-dependencies", defaultPhase = LifecyclePhase.PACKAGE, threadSafe = true, requiresDependencyResolution = ResolutionScope.RUNTIME)
 public class NarProvidedDependenciesMojo extends AbstractMojo {
 
     private static final String NAR = "nar";

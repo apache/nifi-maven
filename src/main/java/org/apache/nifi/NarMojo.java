@@ -78,7 +78,7 @@ import org.codehaus.plexus.util.StringUtils;
  * simplified to the use case of NarMojo.
  *
  */
-@Mojo(name = "nar", defaultPhase = LifecyclePhase.PACKAGE, threadSafe = false, requiresDependencyResolution = ResolutionScope.RUNTIME)
+@Mojo(name = "nar", defaultPhase = LifecyclePhase.PACKAGE, threadSafe = true, requiresDependencyResolution = ResolutionScope.RUNTIME)
 public class NarMojo extends AbstractMojo {
 
     private static final String[] DEFAULT_EXCLUDES = new String[]{"**/package.html"};
