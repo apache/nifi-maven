@@ -355,7 +355,7 @@
                         <goals>
                             <goal>helpmojo</goal>
                         </goals>
-                        <phase>process-classes</phase>
+                        <phase>generate-sources</phase>
                     </execution>
                 </executions>
             </plugin>
