@@ -16,18 +16,13 @@
  */
 package org.apache.nifi;
 
-import java.io.File;
-import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 import org.apache.maven.archiver.MavenArchiveConfiguration;
 import org.apache.maven.archiver.MavenArchiver;
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.DependencyResolutionRequiredException;
 import org.apache.maven.artifact.factory.ArtifactFactory;
+import org.apache.maven.artifact.handler.ArtifactHandler;
+import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
 import org.apache.maven.artifact.installer.ArtifactInstaller;
 import org.apache.maven.artifact.metadata.ArtifactMetadataSource;
 import org.apache.maven.artifact.repository.ArtifactRepository;
@@ -36,6 +31,7 @@ import org.apache.maven.artifact.resolver.ArtifactCollector;
 import org.apache.maven.artifact.resolver.ArtifactNotFoundException;
 import org.apache.maven.artifact.resolver.ArtifactResolutionException;
 import org.apache.maven.artifact.resolver.ArtifactResolver;
+import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -46,29 +42,57 @@ import org.apache.maven.plugin.dependency.utils.resolvers.ArtifactsResolver;
 import org.apache.maven.plugin.dependency.utils.resolvers.DefaultArtifactsResolver;
 import org.apache.maven.plugin.dependency.utils.translators.ArtifactTranslator;
 import org.apache.maven.plugin.dependency.utils.translators.ClassifierTypeTranslator;
+import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
-import org.apache.maven.execution.MavenSession;
-import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.project.MavenProjectHelper;
+import org.apache.maven.project.ProjectBuilder;
 import org.apache.maven.shared.artifact.filter.collection.ArtifactFilterException;
 import org.apache.maven.shared.artifact.filter.collection.ArtifactIdFilter;
 import org.apache.maven.shared.artifact.filter.collection.ArtifactsFilter;
 import org.apache.maven.shared.artifact.filter.collection.ClassifierFilter;
 import org.apache.maven.shared.artifact.filter.collection.FilterArtifacts;
 import org.apache.maven.shared.artifact.filter.collection.GroupIdFilter;
-import org.apache.maven.shared.artifact.filter.collection.ScopeFilter;
 import org.apache.maven.shared.artifact.filter.collection.ProjectTransitivityFilter;
+import org.apache.maven.shared.artifact.filter.collection.ScopeFilter;
 import org.apache.maven.shared.artifact.filter.collection.TypeFilter;
+import org.apache.maven.shared.dependency.tree.DependencyTreeBuilder;
+import org.apache.nifi.extension.definition.ExtensionDefinition;
+import org.apache.nifi.extension.definition.ExtensionType;
+import org.apache.nifi.extension.definition.ServiceAPIDefinition;
+import org.apache.nifi.extension.definition.extraction.ExtensionClassLoader;
+import org.apache.nifi.extension.definition.extraction.ExtensionClassLoaderFactory;
+import org.apache.nifi.extension.definition.extraction.ExtensionDefinitionFactory;
 import org.codehaus.plexus.archiver.ArchiverException;
 import org.codehaus.plexus.archiver.jar.JarArchiver;
 import org.codehaus.plexus.archiver.jar.ManifestException;
 import org.codehaus.plexus.archiver.manager.ArchiverManager;
 import org.codehaus.plexus.util.FileUtils;
 import org.codehaus.plexus.util.StringUtils;
+import org.eclipse.aether.RepositorySystemSession;
+
+import javax.xml.stream.XMLOutputFactory;
+import javax.xml.stream.XMLStreamWriter;
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.nio.file.Files;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * Packages the current project as an Apache NiFi Archive (NAR).
@@ -80,6 +104,8 @@ import org.codehaus.plexus.util.StringUtils;
  */
 @Mojo(name = "nar", defaultPhase = LifecyclePhase.PACKAGE, threadSafe = true, requiresDependencyResolution = ResolutionScope.RUNTIME)
 public class NarMojo extends AbstractMojo {
+    private static final String SERVICES_DIRECTORY = "META-INF/services/";
+    private static final String DOCUMENTATION_WRITER_CLASS_NAME = "org.apache.nifi.documentation.xml.XmlDocumentationWriter";
 
     private static final String[] DEFAULT_EXCLUDES = new String[]{"**/package.html"};
     private static final String[] DEFAULT_INCLUDES = new String[]{"**/**"};
@@ -357,6 +383,20 @@ public class NarMojo extends AbstractMojo {
     public boolean silent;
 
     /**
+     * The dependency tree builder to use for verbose output.
+     */
+    @Component
+    private DependencyTreeBuilder dependencyTreeBuilder;
+
+    /**
+     * *
+     * The {@link ArtifactHandlerManager} into which any extension {@link ArtifactHandler} instances should have been injected when the extensions were loaded.
+     */
+    @Component
+    private ArtifactHandlerManager artifactHandlerManager;
+
+
+    /**
      * Output absolute filename for resolved artifacts
      *
      */
@@ -426,11 +466,177 @@ public class NarMojo extends AbstractMojo {
     protected boolean cloneDuringInstanceClassLoading;
 
 
+    /**
+     * The {@link RepositorySystemSession} used for obtaining the local and remote artifact repositories.
+     */
+    @Parameter(defaultValue = "${repositorySystemSession}", readonly = true)
+    private RepositorySystemSession repoSession;
+
+
+    /**
+     * The {@link ProjectBuilder} used to generate the {@link MavenProject} for the nar artifact the dependency tree is being generated for.
+     */
+    @Component
+    private ProjectBuilder projectBuilder;
+
+
+
     @Override
-    public void execute() throws MojoExecutionException, MojoFailureException {
+    public void execute() throws MojoExecutionException {
         copyDependencies();
+
+        try {
+            generateDocumentation();
+        } catch (final Exception e) {
+            getLog().warn("Could not generate extensions' documentation", e);
+        }
+
         makeNar();
     }
+
+    private File getExtensionsDocumentationFile() {
+        final File directory = new File(projectBuildDirectory, "META-INF");
+        return new File(directory, "extension-docs.xml");
+    }
+
+    private void generateDocumentation() throws MojoExecutionException {
+        // Create the ClassLoader for the NAR
+        final ExtensionClassLoaderFactory classLoaderFactory = createClassLoaderFactory();
+
+        final ExtensionClassLoader extensionClassLoader;
+        try {
+            extensionClassLoader = classLoaderFactory.createExtensionClassLoader();
+        } catch (final Exception e) {
+            if (getLog().isDebugEnabled()) {
+                getLog().debug("Unable to create a ClassLoader for documenting extensions. If this NAR contains any NiFi Extensions, those extensions will not be documented.", e);
+            } else {
+                getLog().warn("Unable to create a ClassLoader for documenting extensions. If this NAR contains any NiFi Extensions, those extensions will not be documented. " +
+                    "Enable mvn DEBUG output for more information (mvn -X).");
+            }
+
+            return;
+        }
+
+
+        final File docsFile = getExtensionsDocumentationFile();
+        createDirectory(docsFile.getParentFile());
+
+        try (final OutputStream out = new FileOutputStream(docsFile)) {
+
+            final XMLStreamWriter xmlWriter = XMLOutputFactory.newInstance().createXMLStreamWriter(out, "UTF-8");
+            try {
+                xmlWriter.writeStartElement("extensions");
+
+                final String nifiApiVersion = extensionClassLoader.getNiFiApiVersion();
+                xmlWriter.writeStartElement("nifiApiVersion");
+                xmlWriter.writeCharacters(nifiApiVersion);
+                xmlWriter.writeEndElement();
+
+                final Class<?> docWriterClass;
+                try {
+                    docWriterClass = Class.forName(DOCUMENTATION_WRITER_CLASS_NAME, false, extensionClassLoader);
+                } catch (ClassNotFoundException e) {
+                    getLog().warn("Cannot locate class " + DOCUMENTATION_WRITER_CLASS_NAME + ", so no documentation will be generated for the extensions in this NAR");
+                    return;
+                }
+
+                getLog().debug("Creating Extension Definition Factory for NiFi API version " + nifiApiVersion);
+
+                final ExtensionDefinitionFactory extensionDefinitionFactory = new ExtensionDefinitionFactory(extensionClassLoader);
+
+                final ClassLoader currentContextClassLoader = Thread.currentThread().getContextClassLoader();
+                try {
+                    Thread.currentThread().setContextClassLoader(extensionClassLoader);
+
+                    final Set<ExtensionDefinition> processorDefinitions = extensionDefinitionFactory.discoverExtensions(ExtensionType.PROCESSOR);
+                    writeDocumentation(processorDefinitions, extensionClassLoader, docWriterClass, xmlWriter);
+
+                    final Set<ExtensionDefinition> controllerServiceDefinitions = extensionDefinitionFactory.discoverExtensions(ExtensionType.CONTROLLER_SERVICE);
+                    writeDocumentation(controllerServiceDefinitions, extensionClassLoader, docWriterClass, xmlWriter);
+
+                    final Set<ExtensionDefinition> reportingTaskDefinitions = extensionDefinitionFactory.discoverExtensions(ExtensionType.REPORTING_TASK);
+                    writeDocumentation(reportingTaskDefinitions, extensionClassLoader, docWriterClass, xmlWriter);
+                } finally {
+                    if (currentContextClassLoader != null) {
+                        Thread.currentThread().setContextClassLoader(currentContextClassLoader);
+                    }
+                }
+
+                xmlWriter.writeEndElement();
+            } finally {
+                xmlWriter.close();
+            }
+        } catch (final Exception ioe) {
+            throw new MojoExecutionException("Failed to create Extension Documentation", ioe);
+        }
+    }
+
+    private void writeDocumentation(final Set<ExtensionDefinition> extensionDefinitions, final ExtensionClassLoader classLoader,
+                                    final Class<?> docWriterClass, final XMLStreamWriter xmlWriter)
+                                    throws InvocationTargetException, NoSuchMethodException, ClassNotFoundException, InstantiationException, IllegalAccessException {
+
+        for (final ExtensionDefinition definition : extensionDefinitions) {
+            writeDocumentation(definition, classLoader, docWriterClass, xmlWriter);
+        }
+    }
+
+    private void writeDocumentation(final ExtensionDefinition extensionDefinition, final ExtensionClassLoader classLoader,
+                                    final Class<?> docWriterClass, final XMLStreamWriter xmlWriter)
+                                    throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException, ClassNotFoundException {
+
+        getLog().debug("Generating documentation for " + extensionDefinition.getExtensionName() + " using ClassLoader:\n" + classLoader.toTree());
+        final Object docWriter = docWriterClass.getConstructor(XMLStreamWriter.class).newInstance(xmlWriter);
+        final Class<?> configurableComponentClass = Class.forName("org.apache.nifi.components.ConfigurableComponent", false, classLoader);
+
+        final Class<?> extensionClass = Class.forName(extensionDefinition.getExtensionName(), false, classLoader);
+        final Object extensionInstance = extensionClass.newInstance();
+
+        final Set<ServiceAPIDefinition> serviceDefinitions = extensionDefinition.getProvidedServiceAPIs();
+
+        if (serviceDefinitions == null || serviceDefinitions.isEmpty()) {
+            final Method writeMethod = docWriterClass.getMethod("write", configurableComponentClass);
+            writeMethod.invoke(docWriter, extensionInstance);
+        } else {
+            final Class<?> providedServiceApiClass = Class.forName("org.apache.nifi.documentation.StandardProvidedServiceAPI", false, classLoader);
+            final Constructor<?> ctr = providedServiceApiClass.getConstructor(String.class, String.class, String.class, String.class);
+
+            final List<Object> providedServices = new ArrayList<>();
+
+            for (final ServiceAPIDefinition definition : serviceDefinitions) {
+                final Object serviceApi = ctr.newInstance(definition.getServiceAPIClassName(), definition.getServiceGroupId(), definition.getServiceArtifactId(), definition.getServiceVersion());
+                providedServices.add(serviceApi);
+            }
+
+            final Method writeMethod = docWriterClass.getMethod("write", configurableComponentClass, Collection.class);
+            writeMethod.invoke(docWriter, extensionInstance, providedServices);
+        }
+    }
+
+    private ExtensionClassLoaderFactory createClassLoaderFactory() {
+        return new ExtensionClassLoaderFactory.Builder()
+            .artifactResolver(resolver)
+            .dependencyTreeBuilder(dependencyTreeBuilder)
+            .localRepository(local)
+            .log(getLog())
+            .project(project)
+            .projectBuilder(projectBuilder)
+            .remoteRepositories(remoteRepos)
+            .repositorySession(repoSession)
+            .artifactHandlerManager(artifactHandlerManager)
+            .build();
+    }
+
+
+    private void createDirectory(final File file) throws MojoExecutionException {
+        if (!file.exists()) {
+            try {
+                Files.createDirectories(file.toPath());
+            } catch (IOException e) {
+                throw new MojoExecutionException("Could not create directory " + file, e);
+            }
+        }
+    }
+
 
     private void copyDependencies() throws MojoExecutionException {
         DependencyStatusSets dss = getDependencySets(this.failOnMissingClassifierArtifact);
@@ -443,7 +649,7 @@ public class NarMojo extends AbstractMojo {
         artifacts = dss.getSkippedDependencies();
         for (Object artifactOjb : artifacts) {
             Artifact artifact = (Artifact) artifactOjb;
-            getLog().info(artifact.getFile().getName() + " already exists in destination.");
+            getLog().debug(artifact.getFile().getName() + " already exists in destination.");
         }
     }
 
@@ -468,6 +674,7 @@ public class NarMojo extends AbstractMojo {
     protected ArtifactsFilter getMarkedArtifactFilter() {
         return new DestFileFilter(this.overWriteReleases, this.overWriteSnapshots, this.overWriteIfNewer, false, false, false, false, false, getDependenciesDirectory());
     }
+
 
     protected DependencyStatusSets getDependencySets(boolean stopOnFailure) throws MojoExecutionException {
         // add filters in well known order, least specific to most specific
@@ -597,10 +804,17 @@ public class NarMojo extends AbstractMojo {
 
         try {
             File contentDirectory = getClassesDirectory();
-            if (!contentDirectory.exists()) {
-                getLog().warn("NAR will be empty - no content was marked for inclusion!");
-            } else {
+            if (contentDirectory.exists()) {
                 archiver.getArchiver().addDirectory(contentDirectory, getIncludes(), getExcludes());
+            } else {
+                getLog().warn("NAR will be empty - no content was marked for inclusion!");
+            }
+
+            File extensionDocsFile = getExtensionsDocumentationFile();
+            if (extensionDocsFile.exists()) {
+                archiver.getArchiver().addFile(extensionDocsFile, "META-INF/" + extensionDocsFile.getName());
+            } else {
+                getLog().warn("NAR will not contain any Extensions' documentation - no META-INF/" + extensionDocsFile.getName() + " file found!");
             }
 
             File existingManifest = defaultManifestFile;
