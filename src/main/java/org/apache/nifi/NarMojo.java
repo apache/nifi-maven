@@ -77,22 +77,35 @@ import org.eclipse.aether.RepositorySystemSession;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamWriter;
 import java.io.BufferedOutputStream;
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.Reader;
+import java.io.StringWriter;
+import java.io.Writer;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
+import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
+import java.util.stream.Collectors;
 
 /**
  * Packages the current project as an Apache NiFi Archive (NAR).
@@ -487,19 +500,21 @@ public class NarMojo extends AbstractMojo {
 
         try {
             generateDocumentation();
-        } catch (final Exception e) {
-            getLog().warn("Could not generate extensions' documentation", e);
+        } catch (final Throwable t) { // Catch Throwable in case a linkage error such as NoClassDefFoundError occurs
+            getLog().warn("Could not generate extensions' documentation", t);
         }
 
         makeNar();
     }
 
     private File getExtensionsDocumentationFile() {
-        final File directory = new File(projectBuildDirectory, "META-INF");
+        final File directory = new File(projectBuildDirectory, "META-INF/docs");
         return new File(directory, "extension-docs.xml");
     }
 
     private void generateDocumentation() throws MojoExecutionException {
+        getLog().info("Generating documentation for NiFi extensions in the NAR...");
+
         // Create the ClassLoader for the NAR
         final ExtensionClassLoaderFactory classLoaderFactory = createClassLoaderFactory();
 
@@ -520,6 +535,9 @@ public class NarMojo extends AbstractMojo {
 
         final File docsFile = getExtensionsDocumentationFile();
         createDirectory(docsFile.getParentFile());
+
+        final File additionalDetailsDir = new File(docsFile.getParentFile(), "additional-details");
+        createDirectory(additionalDetailsDir);
 
         try (final OutputStream out = new FileOutputStream(docsFile)) {
 
@@ -549,13 +567,13 @@ public class NarMojo extends AbstractMojo {
                     Thread.currentThread().setContextClassLoader(extensionClassLoader);
 
                     final Set<ExtensionDefinition> processorDefinitions = extensionDefinitionFactory.discoverExtensions(ExtensionType.PROCESSOR);
-                    writeDocumentation(processorDefinitions, extensionClassLoader, docWriterClass, xmlWriter);
+                    writeDocumentation(processorDefinitions, extensionClassLoader, docWriterClass, xmlWriter, additionalDetailsDir);
 
                     final Set<ExtensionDefinition> controllerServiceDefinitions = extensionDefinitionFactory.discoverExtensions(ExtensionType.CONTROLLER_SERVICE);
-                    writeDocumentation(controllerServiceDefinitions, extensionClassLoader, docWriterClass, xmlWriter);
+                    writeDocumentation(controllerServiceDefinitions, extensionClassLoader, docWriterClass, xmlWriter, additionalDetailsDir);
 
                     final Set<ExtensionDefinition> reportingTaskDefinitions = extensionDefinitionFactory.discoverExtensions(ExtensionType.REPORTING_TASK);
-                    writeDocumentation(reportingTaskDefinitions, extensionClassLoader, docWriterClass, xmlWriter);
+                    writeDocumentation(reportingTaskDefinitions, extensionClassLoader, docWriterClass, xmlWriter, additionalDetailsDir);
                 } finally {
                     if (currentContextClassLoader != null) {
                         Thread.currentThread().setContextClassLoader(currentContextClassLoader);
@@ -572,17 +590,28 @@ public class NarMojo extends AbstractMojo {
     }
 
     private void writeDocumentation(final Set<ExtensionDefinition> extensionDefinitions, final ExtensionClassLoader classLoader,
-                                    final Class<?> docWriterClass, final XMLStreamWriter xmlWriter)
-                                    throws InvocationTargetException, NoSuchMethodException, ClassNotFoundException, InstantiationException, IllegalAccessException {
+                                    final Class<?> docWriterClass, final XMLStreamWriter xmlWriter, final File additionalDetailsDir)
+        throws InvocationTargetException, NoSuchMethodException, ClassNotFoundException, InstantiationException, IllegalAccessException, IOException {
 
         for (final ExtensionDefinition definition : extensionDefinitions) {
             writeDocumentation(definition, classLoader, docWriterClass, xmlWriter);
         }
+
+        final Set<String> extensionNames = extensionDefinitions.stream()
+            .map(ExtensionDefinition::getExtensionName)
+            .collect(Collectors.toSet());
+
+        try {
+            writeAdditionalDetails(classLoader, extensionNames, additionalDetailsDir);
+        } catch (final Exception e) {
+            throw new IOException("Unable to extract Additional Details", e);
+        }
+
     }
 
     private void writeDocumentation(final ExtensionDefinition extensionDefinition, final ExtensionClassLoader classLoader,
                                     final Class<?> docWriterClass, final XMLStreamWriter xmlWriter)
-                                    throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException, ClassNotFoundException {
+        throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException, ClassNotFoundException, IOException {
 
         getLog().debug("Generating documentation for " + extensionDefinition.getExtensionName() + " using ClassLoader:\n" + classLoader.toTree());
         final Object docWriter = docWriterClass.getConstructor(XMLStreamWriter.class).newInstance(xmlWriter);
@@ -611,6 +640,72 @@ public class NarMojo extends AbstractMojo {
             writeMethod.invoke(docWriter, extensionInstance, providedServices);
         }
     }
+
+    private void writeAdditionalDetails(final ExtensionClassLoader classLoader, final Set<String> extensionNames, final File additionalDetailsDir)
+        throws URISyntaxException, IOException, MojoExecutionException {
+
+        for (final URL url : classLoader.getURLs()) {
+            final File file = new File(url.toURI());
+            final String filename = file.getName();
+            if (!filename.endsWith(".jar")) {
+                continue;
+            }
+
+            writeAdditionalDetails(file, extensionNames, additionalDetailsDir);
+        }
+    }
+
+    private void writeAdditionalDetails(final File file, final Set<String> extensionNames, final File additionalDetailsDir) throws IOException, MojoExecutionException {
+        final JarFile jarFile = new JarFile(file);
+
+        for (final Enumeration<JarEntry> jarEnumeration = jarFile.entries(); jarEnumeration.hasMoreElements();) {
+            final JarEntry jarEntry = jarEnumeration.nextElement();
+
+            final String entryName = jarEntry.getName();
+            if (!entryName.startsWith("docs/")) {
+                continue;
+            }
+
+            final int nextSlashIndex = entryName.indexOf("/", 5);
+            if (nextSlashIndex < 0) {
+                continue;
+            }
+
+            final String componentName = entryName.substring(5, nextSlashIndex);
+            if (!extensionNames.contains(componentName)) {
+                continue;
+            }
+
+            if (jarEntry.isDirectory()) {
+                continue;
+            }
+
+            if (entryName.length() < nextSlashIndex + 1) {
+                continue;
+            }
+
+            getLog().debug("Found file " + entryName + " in " + file + " that consists of documentation for " + componentName);
+            final File componentDirectory = new File(additionalDetailsDir, componentName);
+            final String remainingPath = entryName.substring(nextSlashIndex + 1);
+            final File destinationFile = new File(componentDirectory, remainingPath);
+
+            createDirectory(destinationFile.getParentFile());
+
+            try (final InputStream in = jarFile.getInputStream(jarEntry);
+                 final OutputStream out = new FileOutputStream(destinationFile)) {
+                copy(in, out);
+            }
+        }
+    }
+
+    private void copy(final InputStream in, final OutputStream out) throws IOException {
+        final byte[] buffer = new byte[8192];
+        int len;
+        while ((len = in.read(buffer)) >= 0) {
+            out.write(buffer, 0, len);
+        }
+    }
+
 
     private ExtensionClassLoaderFactory createClassLoaderFactory() {
         return new ExtensionClassLoaderFactory.Builder()
@@ -812,9 +907,14 @@ public class NarMojo extends AbstractMojo {
 
             File extensionDocsFile = getExtensionsDocumentationFile();
             if (extensionDocsFile.exists()) {
-                archiver.getArchiver().addFile(extensionDocsFile, "META-INF/" + extensionDocsFile.getName());
+                archiver.getArchiver().addFile(extensionDocsFile, "META-INF/docs/" + extensionDocsFile.getName());
             } else {
                 getLog().warn("NAR will not contain any Extensions' documentation - no META-INF/" + extensionDocsFile.getName() + " file found!");
+            }
+
+            File additionalDetailsDirectory = new File(getExtensionsDocumentationFile().getParentFile(), "additional-details");
+            if (additionalDetailsDirectory.exists()) {
+                archiver.getArchiver().addDirectory(additionalDetailsDirectory, "META-INF/docs/additional-details/");
             }
 
             File existingManifest = defaultManifestFile;
