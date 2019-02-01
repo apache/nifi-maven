@@ -34,7 +34,9 @@ public class ExtensionClassLoader extends URLClassLoader {
         this.urls = urls;
         this.narArtifact = narArtifact;
         this.allArtifacts = new ArrayList<>(otherArtifacts);
-        allArtifacts.add(narArtifact);
+        if (narArtifact != null) {
+            allArtifacts.add(narArtifact);
+        }
     }
 
     public ExtensionClassLoader(final URL[] urls, final Artifact narArtifact, final Collection<Artifact> otherArtifacts) {
@@ -42,7 +44,9 @@ public class ExtensionClassLoader extends URLClassLoader {
         this.urls = urls;
         this.narArtifact = narArtifact;
         this.allArtifacts = new ArrayList<>(otherArtifacts);
-        allArtifacts.add(narArtifact);
+        if (narArtifact != null) {
+            allArtifacts.add(narArtifact);
+        }
     }
 
     public String getNiFiApiVersion() {
@@ -55,7 +59,7 @@ public class ExtensionClassLoader extends URLClassLoader {
 
         final ClassLoader parent = getParent();
         if (parent instanceof ExtensionClassLoader) {
-            ((ExtensionClassLoader) parent).getNiFiApiVersion();
+            return ((ExtensionClassLoader) parent).getNiFiApiVersion();
         }
 
         return null;

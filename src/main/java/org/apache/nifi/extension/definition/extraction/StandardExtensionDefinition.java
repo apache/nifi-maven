@@ -18,42 +18,20 @@ package org.apache.nifi.extension.definition.extraction;
 
 import org.apache.nifi.extension.definition.ExtensionDefinition;
 import org.apache.nifi.extension.definition.ExtensionType;
-import org.apache.nifi.extension.definition.Restrictions;
 import org.apache.nifi.extension.definition.ServiceAPIDefinition;
 
 import java.util.Set;
 
 public class StandardExtensionDefinition implements ExtensionDefinition {
-    private final String capabilityDescription;
-    private final Set<String> tags;
-    private final Restrictions restrictions;
+
     private final ExtensionType extensionType;
     private final String extensionName;
     private final Set<ServiceAPIDefinition> providedServiceApis;
 
-    public StandardExtensionDefinition(final ExtensionType extensionType, final String extensionName, final String capabilityDescription, final Set<String> tags, final Restrictions restrictions,
-                                       final Set<ServiceAPIDefinition> providedServiceApis) {
+    public StandardExtensionDefinition(final ExtensionType extensionType, final String extensionName, final Set<ServiceAPIDefinition> providedServiceApis) {
         this.extensionType = extensionType;
         this.extensionName = extensionName;
-        this.capabilityDescription = capabilityDescription;
-        this.tags = tags;
-        this.restrictions = restrictions;
         this.providedServiceApis = providedServiceApis;
-    }
-
-    @Override
-    public String getCapabilityDescription() {
-        return capabilityDescription;
-    }
-
-    @Override
-    public Set<String> getTags() {
-        return tags;
-    }
-
-    @Override
-    public Restrictions getRestrictions() {
-        return restrictions;
     }
 
     @Override
