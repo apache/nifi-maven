@@ -17,11 +17,8 @@
 package org.apache.nifi.extension.definition.extraction;
 
 import org.apache.maven.artifact.Artifact;
-import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.nifi.extension.definition.ExtensionDefinition;
 import org.apache.nifi.extension.definition.ExtensionType;
-import org.apache.nifi.extension.definition.Restriction;
-import org.apache.nifi.extension.definition.Restrictions;
 import org.apache.nifi.extension.definition.ServiceAPIDefinition;
 
 import java.io.BufferedReader;
@@ -29,9 +26,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
-import java.lang.annotation.Annotation;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.Collections;
 import java.util.Enumeration;
@@ -39,8 +33,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class ExtensionDefinitionFactory {
     private static final String SERVICES_DIRECTORY = "META-INF/services/";
@@ -78,17 +70,10 @@ public class ExtensionDefinitionFactory {
         return definitions;
     }
 
-    private ExtensionDefinition createExtensionDefinition(final ExtensionType extensionType, final String className) throws ClassNotFoundException,
-                IllegalAccessException, NoSuchMethodException, InvocationTargetException {
-
+    private ExtensionDefinition createExtensionDefinition(final ExtensionType extensionType, final String className) throws ClassNotFoundException {
         final Class<?> extensionClass = Class.forName(className, false, extensionClassLoader);
-
-        final String capabilityDescription = getCapabilityDescription(extensionClass);
-        final Set<String> tags = getTags(extensionClass);
-        final Restrictions restrictions = getRestrictions(extensionClass);
         final Set<ServiceAPIDefinition> serviceApis = getProvidedServiceAPIs(extensionType, extensionClass);
-
-        return new StandardExtensionDefinition(extensionType, className, capabilityDescription, tags, restrictions, serviceApis);
+        return new StandardExtensionDefinition(extensionType, className, serviceApis);
     }
 
     private Set<ServiceAPIDefinition> getProvidedServiceAPIs(final ExtensionType extensionType, final Class<?> extensionClass) throws ClassNotFoundException {
@@ -115,99 +100,6 @@ public class ExtensionDefinitionFactory {
 
         return serviceApis;
     }
-
-    private Restrictions getRestrictions(final Class<?> extensionClass) throws ClassNotFoundException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
-        final String restrictedDescription = getRestrictedDescription(extensionClass);
-        final Map<String, String> specificRestrictions = getSpecificRestrictions(extensionClass);
-
-        final boolean hasRestriction = restrictedDescription != null || !specificRestrictions.isEmpty();
-        final Restrictions restrictions;
-        if (!hasRestriction) {
-            return null;
-        }
-
-        final Set<Restriction> restrictionSet = new HashSet<>();
-        for (final Map.Entry<String, String> specificRestriction : specificRestrictions.entrySet()) {
-            restrictionSet.add(new StandardRestriction(specificRestriction.getKey(), specificRestriction.getValue()));
-        }
-
-        return new StandardRestrictions(restrictedDescription, restrictionSet);
-    }
-
-
-    private String getCapabilityDescription(final Class<?> extensionClass) throws InvocationTargetException,
-                IllegalAccessException, NoSuchMethodException, ClassNotFoundException {
-
-        final Class capabilityDescriptionClass = Class.forName("org.apache.nifi.annotation.documentation.CapabilityDescription", false, extensionClass.getClassLoader());
-        final Method valueMethod = capabilityDescriptionClass.getMethod("value");
-
-        final Annotation capabilityDescriptionAnnotation = extensionClass.getAnnotation(capabilityDescriptionClass);
-        if (capabilityDescriptionAnnotation == null) {
-            return null;
-        }
-
-        final String capabilityDescriptionText = (String) valueMethod.invoke(capabilityDescriptionAnnotation);
-        return capabilityDescriptionText;
-    }
-
-
-    private Set<String> getTags(final Class<?> extensionClass) throws InvocationTargetException, IllegalAccessException, NoSuchMethodException, ClassNotFoundException {
-        final Class tagsClass = Class.forName("org.apache.nifi.annotation.documentation.Tags", false, extensionClass.getClassLoader());
-        final Method valueMethod = tagsClass.getMethod("value");
-
-        final Annotation tagsAnnotation = extensionClass.getAnnotation(tagsClass);
-        if (tagsAnnotation == null) {
-            return Collections.emptySet();
-        }
-
-        final String[] tags = (String[]) valueMethod.invoke(tagsAnnotation);
-        return Stream.of(tags).collect(Collectors.<String>toSet());
-    }
-
-
-    private Map<String, String> getSpecificRestrictions(final Class<?> extensionClass) throws InvocationTargetException, IllegalAccessException, NoSuchMethodException, ClassNotFoundException {
-        final Class restrictedClass = Class.forName("org.apache.nifi.annotation.behavior.Restricted", false, extensionClass.getClassLoader());
-        final Class restrictionClass = Class.forName("org.apache.nifi.annotation.behavior.Restriction", false, extensionClass.getClassLoader());
-        final Class requiredPermissionClass = Class.forName("org.apache.nifi.components.RequiredPermission", false, extensionClass.getClassLoader());
-
-        final Method restrictionsMethod = restrictedClass.getMethod("restrictions");
-        final Method explanationMethod = restrictionClass.getMethod("explanation");
-        final Method requiredPermissionMethod = restrictionClass.getMethod("requiredPermission");
-        final Method getPermissionIdentifierMethod = requiredPermissionClass.getMethod("getPermissionIdentifier");
-
-        final Annotation restrictionAnnotation = restrictedClass.getAnnotation(restrictedClass);
-        if (restrictionAnnotation == null) {
-            return edu.emory.mathcs.backport.java.util.Collections.emptyMap();
-        }
-
-        final Object[] restrictionsArray = (Object[]) restrictionsMethod.invoke(restrictionAnnotation);
-
-        final Map<String, String> restrictions = new HashMap<>();
-        for (final Object restriction : restrictionsArray) {
-            final String explanation = (String) explanationMethod.invoke(restriction);
-
-            final Object requiredPermission = requiredPermissionMethod.invoke(restriction);
-            final String requiredPermissionId = (String) getPermissionIdentifierMethod.invoke(requiredPermission);
-
-            restrictions.put(requiredPermissionId, explanation);
-        }
-
-        return restrictions;
-    }
-
-    private String getRestrictedDescription(final Class<?> extensionClass) throws InvocationTargetException, IllegalAccessException, NoSuchMethodException, ClassNotFoundException {
-        final Class restrictedClass = Class.forName("org.apache.nifi.annotation.behavior.Restricted", false, extensionClass.getClassLoader());
-        final Method valueMethod = restrictedClass.getMethod("value");
-
-        final Annotation restrictedAnnotation = extensionClass.getAnnotation(restrictedClass);
-        if (restrictedAnnotation == null) {
-            return null;
-        }
-
-        return (String) valueMethod.invoke(restrictedAnnotation);
-    }
-
-
 
     private Set<String> discoverClassNames(final String extensionType) throws IOException {
         final Set<String> classNames = new HashSet<>();

@@ -19,20 +19,6 @@ package org.apache.nifi.extension.definition;
 import java.util.Set;
 
 public interface ExtensionDefinition {
-    /**
-     * @return the extension's capability description
-     */
-    String getCapabilityDescription();
-
-    /**
-     * @return the set of Tags associated with the extension
-     */
-    Set<String> getTags();
-
-    /**
-     * @return the Restrictions that are placed on the Extension
-     */
-    Restrictions getRestrictions();
 
     /**
      * @return the type of Extension
@@ -49,4 +35,5 @@ public interface ExtensionDefinition {
      * @return the name of the Extension
      */
     String getExtensionName();
+
 }

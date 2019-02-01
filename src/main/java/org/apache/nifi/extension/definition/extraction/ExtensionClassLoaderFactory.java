@@ -42,13 +42,14 @@ import org.eclipse.aether.RepositorySystemSession;
 import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
 
 public class ExtensionClassLoaderFactory {
     private final Log log;
@@ -56,7 +57,6 @@ public class ExtensionClassLoaderFactory {
     private final RepositorySystemSession repoSession;
     private final ProjectBuilder projectBuilder;
     private final ArtifactRepository localRepo;
-    private final List<ArtifactRepository> remoteRepos;
     private final DependencyTreeBuilder dependencyTreeBuilder;
     private final ArtifactResolver artifactResolver;
     private final ArtifactHandlerManager artifactHandlerManager;
@@ -67,7 +67,6 @@ public class ExtensionClassLoaderFactory {
         this.repoSession = builder.repositorySession;
         this.projectBuilder = builder.projectBuilder;
         this.localRepo = builder.localRepo;
-        this.remoteRepos = new ArrayList<>(builder.remoteRepos);
         this.dependencyTreeBuilder = builder.dependencyTreeBuilder;
         this.artifactResolver = builder.artifactResolver;
         this.artifactHandlerManager = builder.artifactHandlerManager;
@@ -77,25 +76,18 @@ public class ExtensionClassLoaderFactory {
         return log;
     }
 
-    public ExtensionClassLoader createExtensionClassLoader() throws MojoExecutionException {
-        final Set<Artifact> artifacts = new HashSet<>();
-        gatherArtifacts(project, artifacts);
+    public ExtensionClassLoader createExtensionClassLoader() throws MojoExecutionException, ProjectBuildingException {
+        final Artifact narArtifact = project.getArtifact();
+        final Set<Artifact> narArtifacts = getNarDependencies(narArtifact);
+
+        final ArtifactsHolder artifactsHolder = new ArtifactsHolder();
+        artifactsHolder.addArtifacts(narArtifacts);
 
         getLog().debug("Project artifacts: ");
-        artifacts.forEach(artifact -> getLog().debug(artifact.toString()));
+        narArtifacts.forEach(artifact -> getLog().debug(artifact.getArtifactId()));
 
-        final Artifact narArtifact = project.getArtifact();
-
-        final VersionLookup versionLookup = (group, artifact) -> {
-            try {
-                return determineProvidedEntityVersion(artifacts, group, artifact);
-            } catch (final Exception e) {
-                throw new RuntimeException("Failed to determine provided version of NiFi dependencies", e);
-            }
-        };
-
-        final ClassLoader parentClassLoader = createClassLoader(artifacts, versionLookup);
-        final ExtensionClassLoader classLoader = createClassLoader(artifacts, parentClassLoader, narArtifact);
+        final ExtensionClassLoader parentClassLoader = createClassLoader(narArtifacts, artifactsHolder);
+        final ExtensionClassLoader classLoader = createClassLoader(narArtifacts, parentClassLoader, narArtifact);
 
         if (getLog().isDebugEnabled()) {
             getLog().debug("Full ClassLoader is:\n" + classLoader.toTree());
@@ -104,15 +96,19 @@ public class ExtensionClassLoaderFactory {
         return classLoader;
     }
 
-    private ClassLoader createClassLoader(final Set<Artifact> artifacts, final VersionLookup versionLookup) throws MojoExecutionException {
+    private ExtensionClassLoader createClassLoader(final Set<Artifact> artifacts, final ArtifactsHolder artifactsHolder)
+            throws MojoExecutionException, ProjectBuildingException {
+
         final Artifact nar = removeNarArtifact(artifacts);
         if (nar == null) {
-            final ClassLoader providedEntityClassLoader = createProvidedEntitiesClassLoader(versionLookup);
-            return createUrlClassLoader(artifacts, providedEntityClassLoader);
+            final ExtensionClassLoader providedEntityClassLoader = createProvidedEntitiesClassLoader(artifactsHolder);
+            return createClassLoader(artifacts, providedEntityClassLoader, null);
         }
 
         final Set<Artifact> narDependencies = getNarDependencies(nar);
-        return createClassLoader(narDependencies, createClassLoader(narDependencies, versionLookup), nar);
+        artifactsHolder.addArtifacts(narDependencies);
+
+        return createClassLoader(narDependencies, createClassLoader(narDependencies, artifactsHolder), nar);
     }
 
 
@@ -141,7 +137,7 @@ public class ExtensionClassLoaderFactory {
         narRequest.setRepositorySession(repoSession);
         narRequest.setSystemProperties(System.getProperties());
 
-        final Set<Artifact> narDependencies = new HashSet<>();
+        final Set<Artifact> narDependencies = new TreeSet<>();
 
         try {
             final ProjectBuildingResult narResult = projectBuilder.build(narArtifact, narRequest);
@@ -213,7 +209,6 @@ public class ExtensionClassLoaderFactory {
 
         final ArtifactResolutionRequest request = new ArtifactResolutionRequest();
         request.setLocalRepository(localRepo);
-        request.setRemoteRepositories(remoteRepos);
         request.setArtifact(artifact);
 
         final ArtifactResolutionResult result = artifactResolver.resolve(request);
@@ -241,15 +236,17 @@ public class ExtensionClassLoaderFactory {
         return sorted.get(0);
     }
 
-    private ClassLoader createProvidedEntitiesClassLoader(final VersionLookup versionLookup) throws MojoExecutionException {
-        final String nifiApiVersion = versionLookup.getVersion("org.apache.nifi", "nifi-api");
+    private ExtensionClassLoader createProvidedEntitiesClassLoader(final ArtifactsHolder artifactsHolder)
+            throws MojoExecutionException, ProjectBuildingException {
+
+        final String nifiApiVersion = determineProvidedEntityVersion(artifactsHolder.getAllArtifacts(), "org.apache.nifi", "nifi-api");
         if (nifiApiVersion == null) {
             throw new MojoExecutionException("Could not find any dependency, provided or otherwise, on [org.apache.nifi:nifi-api]");
         } else {
             getLog().info("Found a dependency on version " + nifiApiVersion + " of NiFi API");
         }
 
-        final String slf4jApiVersion = versionLookup.getVersion("org.slf4j", "slf4j-api");
+        final String slf4jApiVersion = determineProvidedEntityVersion(artifactsHolder.getAllArtifacts(),"org.slf4j", "slf4j-api");
 
         final Artifact nifiApiArtifact = getProvidedArtifact("org.apache.nifi", "nifi-api", nifiApiVersion);
         final Artifact nifiFrameworkApiArtifact = getProvidedArtifact("org.apache.nifi", "nifi-framework-api", nifiApiArtifact.getVersion());
@@ -262,23 +259,10 @@ public class ExtensionClassLoaderFactory {
         providedArtifacts.add(slf4jArtifact);
 
         getLog().debug("Creating Provided Entities Class Loader with artifacts: " + providedArtifacts);
-        return createUrlClassLoader(providedArtifacts, null);
+        return createClassLoader(providedArtifacts, null, null);
     }
 
-    private ClassLoader createUrlClassLoader(final Set<Artifact> artifacts, final ClassLoader parent) throws MojoExecutionException {
-        final Set<URL> urls = new HashSet<>();
-        for (final Artifact artifact : artifacts) {
-            final Set<URL> artifactUrls = toURLs(artifact);
-            urls.addAll(artifactUrls);
-        }
-
-        getLog().debug("Creating class loader with following dependencies: " + urls);
-
-        final URL[] urlArray = urls.toArray(new URL[0]);
-        return new URLClassLoader(urlArray, parent);
-    }
-
-    private ExtensionClassLoader createClassLoader(final Set<Artifact> artifacts, final ClassLoader parent, final Artifact narArtifact) throws MojoExecutionException {
+    private ExtensionClassLoader createClassLoader(final Set<Artifact> artifacts, final ExtensionClassLoader parent, final Artifact narArtifact) throws MojoExecutionException {
         final Set<URL> urls = new HashSet<>();
         for (final Artifact artifact : artifacts) {
             final Set<URL> artifactUrls = toURLs(artifact);
@@ -330,7 +314,6 @@ public class ExtensionClassLoaderFactory {
 
             final ArtifactResolutionRequest request = new ArtifactResolutionRequest();
             request.setLocalRepository(localRepo);
-            request.setRemoteRepositories(remoteRepos);
             request.setArtifact(artifact);
 
             final ArtifactResolutionResult result = artifactResolver.resolve(request);
@@ -338,7 +321,7 @@ public class ExtensionClassLoaderFactory {
                 throw new MojoExecutionException("Could not resolve local dependency " + artifact);
             }
 
-            getLog().info("Resolved Artifact " + artifact + " to " + result.getArtifacts());
+            getLog().debug("Resolved Artifact " + artifact + " to " + result.getArtifacts());
 
             for (final Artifact resolved : result.getArtifacts()) {
                 urls.addAll(toURLs(resolved));
@@ -362,7 +345,6 @@ public class ExtensionClassLoaderFactory {
         private Log log;
         private MavenProject project;
         private ArtifactRepository localRepo;
-        private List<ArtifactRepository> remoteRepos;
         private DependencyTreeBuilder dependencyTreeBuilder;
         private ArtifactResolver artifactResolver;
         private ProjectBuilder projectBuilder;
@@ -386,11 +368,6 @@ public class ExtensionClassLoaderFactory {
 
         public Builder localRepository(final ArtifactRepository localRepo) {
             this.localRepo = localRepo;
-            return this;
-        }
-
-        public Builder remoteRepositories(final List<ArtifactRepository> remoteRepos) {
-            this.remoteRepos = remoteRepos;
             return this;
         }
 
@@ -419,8 +396,18 @@ public class ExtensionClassLoaderFactory {
         }
     }
 
+    private static class ArtifactsHolder {
 
-    private interface VersionLookup {
-        String getVersion(String groupId, String artifactId);
+        private Set<Artifact> allArtifacts = new TreeSet<>();
+
+        public void addArtifacts(final Set<Artifact> artifacts) {
+            if (artifacts != null) {
+                allArtifacts.addAll(artifacts);
+            }
+        }
+
+        public Set<Artifact> getAllArtifacts() {
+            return allArtifacts;
+        }
     }
 }
