@@ -321,7 +321,7 @@ public class ExtensionClassLoaderFactory {
                 throw new MojoExecutionException("Could not resolve local dependency " + artifact);
             }
 
-            getLog().info("Resolved Artifact " + artifact + " to " + result.getArtifacts());
+            getLog().debug("Resolved Artifact " + artifact + " to " + result.getArtifacts());
 
             for (final Artifact resolved : result.getArtifacts()) {
                 urls.addAll(toURLs(resolved));

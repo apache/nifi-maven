@@ -49,6 +49,7 @@ import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.MavenProjectHelper;
 import org.apache.maven.project.ProjectBuilder;
+import org.apache.maven.project.ProjectBuildingException;
 import org.apache.maven.shared.artifact.filter.collection.ArtifactFilterException;
 import org.apache.maven.shared.artifact.filter.collection.ArtifactIdFilter;
 import org.apache.maven.shared.artifact.filter.collection.ArtifactsFilter;
@@ -470,6 +471,9 @@ public class NarMojo extends AbstractMojo {
     protected boolean cloneDuringInstanceClassLoading;
 
 
+    @Parameter(property = "enforceDocGeneration", defaultValue = "false", required = false)
+    protected boolean enforceDocGeneration;
+
     /**
      * The {@link RepositorySystemSession} used for obtaining the local and remote artifact repositories.
      */
@@ -492,7 +496,12 @@ public class NarMojo extends AbstractMojo {
         try {
             generateDocumentation();
         } catch (final Throwable t) { // Catch Throwable in case a linkage error such as NoClassDefFoundError occurs
-            getLog().warn("Could not generate extensions' documentation", t);
+            if (enforceDocGeneration) {
+                getLog().error("Could not generate extensions' documentation", t);
+                throw t;
+            } else {
+                getLog().warn("Could not generate extensions' documentation", t);
+            }
         }
 
         makeNar();
@@ -513,14 +522,17 @@ public class NarMojo extends AbstractMojo {
         try {
             extensionClassLoader = classLoaderFactory.createExtensionClassLoader();
         } catch (final Exception e) {
-            if (getLog().isDebugEnabled()) {
-                getLog().debug("Unable to create a ClassLoader for documenting extensions. If this NAR contains any NiFi Extensions, those extensions will not be documented.", e);
+            if (enforceDocGeneration) {
+                throw new MojoExecutionException("Failed to create Extension Documentation", e);
             } else {
-                getLog().warn("Unable to create a ClassLoader for documenting extensions. If this NAR contains any NiFi Extensions, those extensions will not be documented. " +
-                    "Enable mvn DEBUG output for more information (mvn -X).");
+                if (getLog().isDebugEnabled()) {
+                    getLog().debug("Unable to create a ClassLoader for documenting extensions. If this NAR contains any NiFi Extensions, those extensions will not be documented.", e);
+                } else {
+                    getLog().warn("Unable to create a ClassLoader for documenting extensions. If this NAR contains any NiFi Extensions, those extensions will not be documented. " +
+                            "Enable mvn DEBUG output for more information (mvn -X).");
+                }
+                return;
             }
-
-            return;
         }
 
 
