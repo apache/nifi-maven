@@ -49,7 +49,6 @@ import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.MavenProjectHelper;
 import org.apache.maven.project.ProjectBuilder;
-import org.apache.maven.project.ProjectBuildingException;
 import org.apache.maven.shared.artifact.filter.collection.ArtifactFilterException;
 import org.apache.maven.shared.artifact.filter.collection.ArtifactIdFilter;
 import org.apache.maven.shared.artifact.filter.collection.ArtifactsFilter;
@@ -66,6 +65,7 @@ import org.apache.nifi.extension.definition.ServiceAPIDefinition;
 import org.apache.nifi.extension.definition.extraction.ExtensionClassLoader;
 import org.apache.nifi.extension.definition.extraction.ExtensionClassLoaderFactory;
 import org.apache.nifi.extension.definition.extraction.ExtensionDefinitionFactory;
+import org.apache.nifi.extension.definition.extraction.StandardServiceAPIDefinition;
 import org.codehaus.plexus.archiver.ArchiverException;
 import org.codehaus.plexus.archiver.jar.JarArchiver;
 import org.codehaus.plexus.archiver.jar.ManifestException;
@@ -92,8 +92,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
@@ -509,7 +511,7 @@ public class NarMojo extends AbstractMojo {
 
     private File getExtensionsDocumentationFile() {
         final File directory = new File(projectBuildDirectory, "META-INF/docs");
-        return new File(directory, "extension-docs.xml");
+        return new File(directory, "extension-manifest.xml");
     }
 
     private void generateDocumentation() throws MojoExecutionException {
@@ -546,12 +548,14 @@ public class NarMojo extends AbstractMojo {
 
             final XMLStreamWriter xmlWriter = XMLOutputFactory.newInstance().createXMLStreamWriter(out, "UTF-8");
             try {
-                xmlWriter.writeStartElement("extensions");
+                xmlWriter.writeStartElement("extensionManifest");
 
                 final String nifiApiVersion = extensionClassLoader.getNiFiApiVersion();
-                xmlWriter.writeStartElement("nifiApiVersion");
+                xmlWriter.writeStartElement("systemApiVersion");
                 xmlWriter.writeCharacters(nifiApiVersion);
                 xmlWriter.writeEndElement();
+
+                xmlWriter.writeStartElement("extensions");
 
                 final Class<?> docWriterClass;
                 try {
@@ -583,6 +587,7 @@ public class NarMojo extends AbstractMojo {
                     }
                 }
 
+                xmlWriter.writeEndElement();
                 xmlWriter.writeEndElement();
             } finally {
                 xmlWriter.close();
@@ -623,25 +628,89 @@ public class NarMojo extends AbstractMojo {
         final Class<?> extensionClass = Class.forName(extensionDefinition.getExtensionName(), false, classLoader);
         final Object extensionInstance = extensionClass.newInstance();
 
-        final Set<ServiceAPIDefinition> serviceDefinitions = extensionDefinition.getProvidedServiceAPIs();
+        final Method initMethod = docWriterClass.getMethod("initialize", configurableComponentClass);
+        initMethod.invoke(docWriter, extensionInstance);
 
-        if (serviceDefinitions == null || serviceDefinitions.isEmpty()) {
+        final Map<String,ServiceAPIDefinition> propertyServiceDefinitions = getRequiredServiceDefinitions(extensionClass, extensionInstance);
+        final Set<ServiceAPIDefinition> providedServiceDefinitions = extensionDefinition.getProvidedServiceAPIs();
+
+        if ((providedServiceDefinitions == null || providedServiceDefinitions.isEmpty())
+                && (propertyServiceDefinitions == null || propertyServiceDefinitions.isEmpty())) {
             final Method writeMethod = docWriterClass.getMethod("write", configurableComponentClass);
             writeMethod.invoke(docWriter, extensionInstance);
         } else {
-            final Class<?> providedServiceApiClass = Class.forName("org.apache.nifi.documentation.StandardProvidedServiceAPI", false, classLoader);
-            final Constructor<?> ctr = providedServiceApiClass.getConstructor(String.class, String.class, String.class, String.class);
+            final Class<?> serviceApiClass = Class.forName("org.apache.nifi.documentation.StandardServiceAPI", false, classLoader);
+            final List<Object> providedServices = getDocumentationServiceAPIs(serviceApiClass, providedServiceDefinitions);
+            final Map<String,Object> propertyServices = getDocumentationServiceAPIs(serviceApiClass, propertyServiceDefinitions);
 
-            final List<Object> providedServices = new ArrayList<>();
+            final Method writeMethod = docWriterClass.getMethod("write", configurableComponentClass, Collection.class, Map.class);
+            writeMethod.invoke(docWriter, extensionInstance, providedServices, propertyServices);
+        }
+    }
 
-            for (final ServiceAPIDefinition definition : serviceDefinitions) {
-                final Object serviceApi = ctr.newInstance(definition.getServiceAPIClassName(), definition.getServiceGroupId(), definition.getServiceArtifactId(), definition.getServiceVersion());
-                providedServices.add(serviceApi);
+    private List<Object> getDocumentationServiceAPIs(Class<?> serviceApiClass, Set<ServiceAPIDefinition> serviceDefinitions) throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
+        final Constructor<?> ctr = serviceApiClass.getConstructor(String.class, String.class, String.class, String.class);
+
+        final List<Object> providedServices = new ArrayList<>();
+
+        for (final ServiceAPIDefinition definition : serviceDefinitions) {
+            final Object serviceApi = ctr.newInstance(definition.getServiceAPIClassName(), definition.getServiceGroupId(), definition.getServiceArtifactId(), definition.getServiceVersion());
+            providedServices.add(serviceApi);
+        }
+        return providedServices;
+    }
+
+    private Map<String,Object> getDocumentationServiceAPIs(Class<?> serviceApiClass, Map<String,ServiceAPIDefinition> serviceDefinitions) throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
+        final Constructor<?> ctr = serviceApiClass.getConstructor(String.class, String.class, String.class, String.class);
+
+        final Map<String,Object> providedServices = new HashMap<>();
+
+        for (final Map.Entry<String,ServiceAPIDefinition> entry : serviceDefinitions.entrySet()) {
+            final String propName = entry.getKey();
+            final ServiceAPIDefinition definition = entry.getValue();
+
+            final Object serviceApi = ctr.newInstance(definition.getServiceAPIClassName(), definition.getServiceGroupId(), definition.getServiceArtifactId(), definition.getServiceVersion());
+            providedServices.put(propName, serviceApi);
+        }
+        return providedServices;
+    }
+
+    private Map<String,ServiceAPIDefinition> getRequiredServiceDefinitions(final Class<?> extensionClass, final Object extensionInstance) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        final Map<String,ServiceAPIDefinition> requiredServiceAPIDefinitions = new HashMap<>();
+
+        final Method writeMethod = extensionClass.getMethod("getPropertyDescriptors");
+        final List<Object> propertyDescriptors = (List<Object>) writeMethod.invoke(extensionInstance);
+
+        if (propertyDescriptors == null) {
+            return requiredServiceAPIDefinitions;
+        }
+
+        for (final Object propDescriptor : propertyDescriptors) {
+            final Method nameMethod = propDescriptor.getClass().getMethod("getName");
+            final String propName = (String) nameMethod.invoke(propDescriptor);
+
+            final Method serviceDefinitionMethod = propDescriptor.getClass().getMethod("getControllerServiceDefinition");
+            final Object serviceDefinition = serviceDefinitionMethod.invoke(propDescriptor);
+
+            if (serviceDefinition == null) {
+                continue;
             }
 
-            final Method writeMethod = docWriterClass.getMethod("write", configurableComponentClass, Collection.class);
-            writeMethod.invoke(docWriter, extensionInstance, providedServices);
+            final Class<?> serviceDefinitionClass = (Class<?>) serviceDefinition;
+            final ExtensionClassLoader extensionClassLoader = (ExtensionClassLoader) serviceDefinitionClass.getClassLoader();
+            final Artifact narArtifact = extensionClassLoader.getNarArtifact();
+
+            final ServiceAPIDefinition serviceAPIDefinition = new StandardServiceAPIDefinition(
+                    serviceDefinitionClass.getName(),
+                    narArtifact.getGroupId(),
+                    narArtifact.getId(),
+                    narArtifact.getBaseVersion()
+            );
+
+            requiredServiceAPIDefinitions.put(propName, serviceAPIDefinition);
         }
+
+        return requiredServiceAPIDefinitions;
     }
 
     private void writeAdditionalDetails(final ExtensionClassLoader classLoader, final Set<String> extensionNames, final File additionalDetailsDir)
