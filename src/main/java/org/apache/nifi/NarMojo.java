@@ -703,7 +703,7 @@ public class NarMojo extends AbstractMojo {
             final ServiceAPIDefinition serviceAPIDefinition = new StandardServiceAPIDefinition(
                     serviceDefinitionClass.getName(),
                     narArtifact.getGroupId(),
-                    narArtifact.getId(),
+                    narArtifact.getArtifactId(),
                     narArtifact.getBaseVersion()
             );
 
