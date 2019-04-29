@@ -648,7 +648,8 @@ public class NarMojo extends AbstractMojo {
         }
     }
 
-    private List<Object> getDocumentationServiceAPIs(Class<?> serviceApiClass, Set<ServiceAPIDefinition> serviceDefinitions) throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
+    private List<Object> getDocumentationServiceAPIs(Class<?> serviceApiClass, Set<ServiceAPIDefinition> serviceDefinitions)
+            throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
         final Constructor<?> ctr = serviceApiClass.getConstructor(String.class, String.class, String.class, String.class);
 
         final List<Object> providedServices = new ArrayList<>();
@@ -660,7 +661,8 @@ public class NarMojo extends AbstractMojo {
         return providedServices;
     }
 
-    private Map<String,Object> getDocumentationServiceAPIs(Class<?> serviceApiClass, Map<String,ServiceAPIDefinition> serviceDefinitions) throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
+    private Map<String,Object> getDocumentationServiceAPIs(Class<?> serviceApiClass, Map<String,ServiceAPIDefinition> serviceDefinitions)
+            throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
         final Constructor<?> ctr = serviceApiClass.getConstructor(String.class, String.class, String.class, String.class);
 
         final Map<String,Object> providedServices = new HashMap<>();
@@ -675,7 +677,8 @@ public class NarMojo extends AbstractMojo {
         return providedServices;
     }
 
-    private Map<String,ServiceAPIDefinition> getRequiredServiceDefinitions(final Class<?> extensionClass, final Object extensionInstance) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    private Map<String,ServiceAPIDefinition> getRequiredServiceDefinitions(final Class<?> extensionClass, final Object extensionInstance)
+            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         final Map<String,ServiceAPIDefinition> requiredServiceAPIDefinitions = new HashMap<>();
 
         final Method writeMethod = extensionClass.getMethod("getPropertyDescriptors");
