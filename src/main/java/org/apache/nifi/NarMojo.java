@@ -58,7 +58,7 @@ import org.apache.maven.shared.artifact.filter.collection.GroupIdFilter;
 import org.apache.maven.shared.artifact.filter.collection.ProjectTransitivityFilter;
 import org.apache.maven.shared.artifact.filter.collection.ScopeFilter;
 import org.apache.maven.shared.artifact.filter.collection.TypeFilter;
-import org.apache.maven.shared.dependency.tree.DependencyTreeBuilder;
+import org.apache.maven.shared.dependency.graph.DependencyGraphBuilder;
 import org.apache.nifi.extension.definition.ExtensionDefinition;
 import org.apache.nifi.extension.definition.ExtensionType;
 import org.apache.nifi.extension.definition.ServiceAPIDefinition;
@@ -393,7 +393,7 @@ public class NarMojo extends AbstractMojo {
      * The dependency tree builder to use for verbose output.
      */
     @Component
-    private DependencyTreeBuilder dependencyTreeBuilder;
+    private DependencyGraphBuilder dependencyGraphBuilder;
 
     /**
      * *
@@ -785,7 +785,7 @@ public class NarMojo extends AbstractMojo {
     private ExtensionClassLoaderFactory createClassLoaderFactory() {
         return new ExtensionClassLoaderFactory.Builder()
             .artifactResolver(resolver)
-            .dependencyTreeBuilder(dependencyTreeBuilder)
+            .dependencyGraphBuilder(dependencyGraphBuilder)
             .localRepository(local)
             .log(getLog())
             .project(project)

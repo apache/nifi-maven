@@ -33,10 +33,10 @@ import org.apache.maven.project.ProjectBuilder;
 import org.apache.maven.project.ProjectBuildingException;
 import org.apache.maven.project.ProjectBuildingRequest;
 import org.apache.maven.project.ProjectBuildingResult;
-import org.apache.maven.shared.dependency.tree.DependencyNode;
-import org.apache.maven.shared.dependency.tree.DependencyTreeBuilder;
-import org.apache.maven.shared.dependency.tree.DependencyTreeBuilderException;
-import org.apache.maven.shared.dependency.tree.traversal.DependencyNodeVisitor;
+import org.apache.maven.shared.dependency.graph.DependencyGraphBuilder;
+import org.apache.maven.shared.dependency.graph.DependencyGraphBuilderException;
+import org.apache.maven.shared.dependency.graph.DependencyNode;
+import org.apache.maven.shared.dependency.graph.traversal.DependencyNodeVisitor;
 import org.eclipse.aether.RepositorySystemSession;
 
 import java.io.File;
@@ -56,7 +56,7 @@ public class ExtensionClassLoaderFactory {
     private final RepositorySystemSession repoSession;
     private final ProjectBuilder projectBuilder;
     private final ArtifactRepository localRepo;
-    private final DependencyTreeBuilder dependencyTreeBuilder;
+    private final DependencyGraphBuilder dependencyGraphBuilder;
     private final ArtifactResolver artifactResolver;
     private final ArtifactHandlerManager artifactHandlerManager;
 
@@ -66,7 +66,7 @@ public class ExtensionClassLoaderFactory {
         this.repoSession = builder.repositorySession;
         this.projectBuilder = builder.projectBuilder;
         this.localRepo = builder.localRepo;
-        this.dependencyTreeBuilder = builder.dependencyTreeBuilder;
+        this.dependencyGraphBuilder = builder.dependencyGraphBuilder;
         this.artifactResolver = builder.artifactResolver;
         this.artifactHandlerManager = builder.artifactHandlerManager;
     }
@@ -131,24 +131,20 @@ public class ExtensionClassLoaderFactory {
         return null;
     }
 
-    private Set<Artifact> getNarDependencies(final Artifact narArtifact) throws MojoExecutionException {
+    private Set<Artifact> getNarDependencies(final Artifact narArtifact) throws MojoExecutionException, ProjectBuildingException {
         final ProjectBuildingRequest narRequest = new DefaultProjectBuildingRequest();
         narRequest.setRepositorySession(repoSession);
         narRequest.setSystemProperties(System.getProperties());
+        narRequest.setLocalRepository(localRepo);
+
+        final ProjectBuildingResult narResult = projectBuilder.build(narArtifact, narRequest);
 
         final Set<Artifact> narDependencies = new TreeSet<>();
+        gatherArtifacts(narResult.getProject(), narDependencies);
+        narDependencies.remove(narArtifact);
+        narDependencies.remove(project.getArtifact());
 
-        try {
-            final ProjectBuildingResult narResult = projectBuilder.build(narArtifact, narRequest);
-            gatherArtifacts(narResult.getProject(), narDependencies);
-            narDependencies.remove(narArtifact);
-            narDependencies.remove(project.getArtifact());
-
-            getLog().debug("Found NAR dependency of " + narArtifact + ", which resolved to the following artifacts: " + narDependencies);
-        } catch (ProjectBuildingException e) {
-            throw new MojoExecutionException("Could not build parent nar project");
-        }
-
+        getLog().debug("Found NAR dependency of " + narArtifact + ", which resolved to the following artifacts: " + narDependencies);
         return narDependencies;
     }
 
@@ -164,18 +160,17 @@ public class ExtensionClassLoaderFactory {
         return findProvidedDependencyVersion(artifacts, groupId, artifactId);
     }
 
-    private String findProvidedDependencyVersion(final Set<Artifact> artifacts, final String groupId, final String artifactId) throws ProjectBuildingException, MojoExecutionException {
-        final ProjectBuildingRequest narRequest = new DefaultProjectBuildingRequest();
-        narRequest.setRepositorySession(repoSession);
-        narRequest.setSystemProperties(System.getProperties());
+    private String findProvidedDependencyVersion(final Set<Artifact> artifacts, final String groupId, final String artifactId) {
+        final ProjectBuildingRequest projectRequest = new DefaultProjectBuildingRequest();
+        projectRequest.setRepositorySession(repoSession);
+        projectRequest.setSystemProperties(System.getProperties());
+        projectRequest.setLocalRepository(localRepo);
 
         for (final Artifact artifact : artifacts) {
             final Set<Artifact> artifactDependencies = new HashSet<>();
-
             try {
-                final ProjectBuildingResult projectResult = projectBuilder.build(artifact, narRequest);
+                final ProjectBuildingResult projectResult = projectBuilder.build(artifact, projectRequest);
                 gatherArtifacts(projectResult.getProject(), artifactDependencies);
-
                 getLog().debug("For Artifact " + artifact + ", found the following dependencies:");
                 artifactDependencies.forEach(dep -> getLog().debug(dep.toString()));
 
@@ -295,9 +290,15 @@ public class ExtensionClassLoaderFactory {
         };
 
         try {
-            final DependencyNode depNode = dependencyTreeBuilder.buildDependencyTree(mavenProject, localRepo, null);
+            final ProjectBuildingRequest projectRequest = new DefaultProjectBuildingRequest();
+            projectRequest.setRepositorySession(repoSession);
+            projectRequest.setSystemProperties(System.getProperties());
+            projectRequest.setLocalRepository(localRepo);
+            projectRequest.setProject(mavenProject);
+
+            final DependencyNode depNode = dependencyGraphBuilder.buildDependencyGraph(projectRequest, null);
             depNode.accept(nodeVisitor);
-        } catch (DependencyTreeBuilderException e) {
+        } catch (DependencyGraphBuilderException e) {
             throw new MojoExecutionException("Failed to build dependency tree", e);
         }
     }
@@ -344,7 +345,7 @@ public class ExtensionClassLoaderFactory {
         private Log log;
         private MavenProject project;
         private ArtifactRepository localRepo;
-        private DependencyTreeBuilder dependencyTreeBuilder;
+        private DependencyGraphBuilder dependencyGraphBuilder;
         private ArtifactResolver artifactResolver;
         private ProjectBuilder projectBuilder;
         private RepositorySystemSession repositorySession;
@@ -370,8 +371,8 @@ public class ExtensionClassLoaderFactory {
             return this;
         }
 
-        public Builder dependencyTreeBuilder(final DependencyTreeBuilder dependencyTreeBuilder) {
-            this.dependencyTreeBuilder = dependencyTreeBuilder;
+        public Builder dependencyGraphBuilder(final DependencyGraphBuilder dependencyGraphBuilder) {
+            this.dependencyGraphBuilder = dependencyGraphBuilder;
             return this;
         }
 

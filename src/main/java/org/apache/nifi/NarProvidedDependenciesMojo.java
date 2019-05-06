@@ -34,10 +34,10 @@ import org.apache.maven.project.ProjectBuilder;
 import org.apache.maven.project.ProjectBuildingException;
 import org.apache.maven.project.ProjectBuildingRequest;
 import org.apache.maven.project.ProjectBuildingResult;
-import org.apache.maven.shared.dependency.tree.DependencyNode;
-import org.apache.maven.shared.dependency.tree.DependencyTreeBuilder;
-import org.apache.maven.shared.dependency.tree.DependencyTreeBuilderException;
-import org.apache.maven.shared.dependency.tree.traversal.DependencyNodeVisitor;
+import org.apache.maven.shared.dependency.graph.DependencyGraphBuilder;
+import org.apache.maven.shared.dependency.graph.DependencyGraphBuilderException;
+import org.apache.maven.shared.dependency.graph.DependencyNode;
+import org.apache.maven.shared.dependency.graph.traversal.DependencyNodeVisitor;
 import org.eclipse.aether.RepositorySystemSession;
 
 import java.util.ArrayDeque;
@@ -84,7 +84,7 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
      * The dependency tree builder to use for verbose output.
      */
     @Component
-    private DependencyTreeBuilder dependencyTreeBuilder;
+    private DependencyGraphBuilder dependencyGraphBuilder;
 
     /**
      * *
@@ -128,7 +128,9 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
             final ProjectBuildingRequest narRequest = new DefaultProjectBuildingRequest();
             narRequest.setRepositorySession(repoSession);
             narRequest.setSystemProperties(System.getProperties());
+
             final ProjectBuildingResult narResult = projectBuilder.build(narArtifact, narRequest);
+            narRequest.setProject(narResult.getProject());
 
             // get the artifact handler for excluding dependencies
             final ArtifactHandler narHandler = excludesDependencies(narArtifact);
@@ -145,7 +147,7 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
             artifactHandlerManager.addHandlers(narHandlerMap);
 
             // get the dependency tree
-            final DependencyNode root = dependencyTreeBuilder.buildDependencyTree(narResult.getProject(), localRepository, null);
+            final DependencyNode root = dependencyGraphBuilder.buildDependencyGraph(narRequest, null);
 
             // write the appropriate output
             DependencyNodeVisitor visitor = null;
@@ -163,7 +165,7 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
             // visit and print the results
             root.accept(visitor);
             getLog().info("--- Provided NAR Dependencies ---\n\n" + visitor.toString());
-        } catch (DependencyTreeBuilderException | ProjectBuildingException e) {
+        } catch (ProjectBuildingException | DependencyGraphBuilderException e) {
             throw new MojoExecutionException("Cannot build project dependency tree", e);
         }
     }
