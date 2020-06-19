@@ -176,8 +176,8 @@ public class ExtensionClassLoaderFactory {
 
                 for (final Artifact dependency : artifactDependencies) {
                     if (dependency.getGroupId().equals(groupId) && dependency.getArtifactId().equals(artifactId)) {
-                        getLog().debug("Found version of " + groupId + ":" + artifactId + " to be " + artifact.getVersion());
-                        return artifact.getVersion();
+                        getLog().debug("Found version of " + groupId + ":" + artifactId + " to be " + dependency.getVersion());
+                        return dependency.getVersion();
                     }
                 }
             } catch (final Exception e) {
