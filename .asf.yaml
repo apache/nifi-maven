@@ -20,6 +20,7 @@ github:
     - nifi
     - maven
     - java
+    - hacktoberfest
   features:
     wiki: false
     issues: false
