@@ -72,9 +72,11 @@ import org.codehaus.plexus.archiver.jar.ManifestException;
 import org.codehaus.plexus.archiver.manager.ArchiverManager;
 import org.codehaus.plexus.util.FileUtils;
 import org.codehaus.plexus.util.StringUtils;
+import org.codehaus.plexus.util.xml.XmlStreamWriter;
 import org.eclipse.aether.RepositorySystemSession;
 
 import javax.xml.stream.XMLOutputFactory;
+import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -111,7 +113,7 @@ import java.util.stream.Collectors;
  */
 @Mojo(name = "nar", defaultPhase = LifecyclePhase.PACKAGE, threadSafe = true, requiresDependencyResolution = ResolutionScope.RUNTIME)
 public class NarMojo extends AbstractMojo {
-    private static final String SERVICES_DIRECTORY = "META-INF/services/";
+    private static final String CONTROLLER_SERVICE_CLASS_NAME = "org.apache.nifi.controller.ControllerService";
     private static final String DOCUMENTATION_WRITER_CLASS_NAME = "org.apache.nifi.documentation.xml.XmlDocumentationWriter";
 
     private static final String[] DEFAULT_EXCLUDES = new String[]{"**/package.html"};
@@ -507,6 +509,7 @@ public class NarMojo extends AbstractMojo {
         }
 
         makeNar();
+        makeDocsJar();
     }
 
     private File getExtensionsDocumentationFile() {
@@ -537,7 +540,6 @@ public class NarMojo extends AbstractMojo {
             }
         }
 
-
         final File docsFile = getExtensionsDocumentationFile();
         createDirectory(docsFile.getParentFile());
 
@@ -550,9 +552,19 @@ public class NarMojo extends AbstractMojo {
             try {
                 xmlWriter.writeStartElement("extensionManifest");
 
+                // Write NiFi API version
                 final String nifiApiVersion = extensionClassLoader.getNiFiApiVersion();
                 xmlWriter.writeStartElement("systemApiVersion");
                 xmlWriter.writeCharacters(nifiApiVersion);
+                xmlWriter.writeEndElement();
+
+                // Write Parent NAR information
+                xmlWriter.writeStartElement("parentNar");
+                if (this.narDependencyGroup != null && this.narDependencyId != null && this.narDependencyVersion != null) {
+                    writeXmlTag(xmlWriter, "groupId", narDependencyGroup);
+                    writeXmlTag(xmlWriter, "artifactId", narDependencyId);
+                    writeXmlTag(xmlWriter, "version", narDependencyVersion);
+                }
                 xmlWriter.writeEndElement();
 
                 xmlWriter.writeStartElement("extensions");
@@ -595,6 +607,12 @@ public class NarMojo extends AbstractMojo {
         } catch (final Exception ioe) {
             throw new MojoExecutionException("Failed to create Extension Documentation", ioe);
         }
+    }
+
+    private void writeXmlTag(final XMLStreamWriter xmlWriter, final String tagName, final String value) throws XMLStreamException {
+        xmlWriter.writeStartElement(tagName);
+        xmlWriter.writeCharacters(value);
+        xmlWriter.writeEndElement();
     }
 
     private void writeDocumentation(final Set<ExtensionDefinition> extensionDefinitions, final ExtensionClassLoader classLoader,
@@ -700,8 +718,18 @@ public class NarMojo extends AbstractMojo {
             }
 
             final Class<?> serviceDefinitionClass = (Class<?>) serviceDefinition;
+            if (CONTROLLER_SERVICE_CLASS_NAME.equals(serviceDefinitionClass.getName())) {
+                continue;
+            }
+
             final ExtensionClassLoader extensionClassLoader = (ExtensionClassLoader) serviceDefinitionClass.getClassLoader();
             final Artifact narArtifact = extensionClassLoader.getNarArtifact();
+
+            if (narArtifact == null) {
+                getLog().warn("Could not find NAR Artifact for Controller Service Definition " + serviceDefinitionClass.getName() +
+                    ". Documentation may  not show appropriate linkage to Controller Service.");
+                continue;
+            }
 
             final ServiceAPIDefinition serviceAPIDefinition = new StandardServiceAPIDefinition(
                     serviceDefinitionClass.getName(),
@@ -809,15 +837,14 @@ public class NarMojo extends AbstractMojo {
 
     private void copyDependencies() throws MojoExecutionException {
         DependencyStatusSets dss = getDependencySets(this.failOnMissingClassifierArtifact);
-        Set artifacts = dss.getResolvedDependencies();
+        Set<Artifact> artifacts = dss.getResolvedDependencies();
 
-        for (Object artifactObj : artifacts) {
-            copyArtifact((Artifact) artifactObj);
+        for (Artifact artifact : artifacts) {
+            copyArtifact(artifact);
         }
 
         artifacts = dss.getSkippedDependencies();
-        for (Object artifactOjb : artifacts) {
-            Artifact artifact = (Artifact) artifactOjb;
+        for (Artifact artifact : artifacts) {
             getLog().debug(artifact.getFile().getName() + " already exists in destination.");
         }
     }
@@ -951,6 +978,47 @@ public class NarMojo extends AbstractMojo {
 
     private File getDependenciesDirectory() {
         return new File(getClassesDirectory(), "META-INF/bundled-dependencies");
+    }
+
+    private void makeDocsJar() throws MojoExecutionException {
+        final File docsFile = createDocsArchive();
+        projectHelper.attachArtifact(project, "jar", "nar-docs", docsFile);
+    }
+
+    private File createDocsArchive() throws MojoExecutionException {
+        final File outputDirectory = projectBuildDirectory;
+        final File jarFile = new File(outputDirectory, finalName + "-docs.jar");
+
+        final MavenArchiver archiver = new MavenArchiver();
+        archiver.setArchiver(jarArchiver);
+        archiver.setOutputFile(jarFile);
+        archive.setForced(forceCreation);
+
+        try {
+            File extensionDocsFile = getExtensionsDocumentationFile();
+            if (extensionDocsFile.exists()) {
+                archiver.getArchiver().addFile(extensionDocsFile, "META-INF/docs/" + extensionDocsFile.getName());
+            } else {
+                getLog().warn("NAR will not contain any Extensions' documentation - no META-INF/" + extensionDocsFile.getName() + " file found!");
+            }
+
+            // Add Changelog
+            final File baseDir = project.getBasedir();
+            if (baseDir != null) {
+                final File changeLog = new File(baseDir, "src/main/resources/changelog.xml");
+                if (changeLog.exists()) {
+                    archiver.getArchiver().addFile(extensionDocsFile, "META-INF/docs/changelog.xml");
+                } else {
+                    getLog().info("Did not find a file at " + changeLog.getAbsolutePath() + " so no changelog will be included in the docs artifact");
+                }
+            }
+
+            archiver.createArchive(session, project, archive);
+        } catch (final Exception e) {
+            throw new MojoExecutionException("Failed to generate documentation for nar", e);
+        }
+
+        return jarFile;
     }
 
     private void makeNar() throws MojoExecutionException {
