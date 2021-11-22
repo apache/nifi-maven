@@ -75,6 +75,7 @@ import org.codehaus.plexus.util.StringUtils;
 import org.eclipse.aether.RepositorySystemSession;
 
 import javax.xml.stream.XMLOutputFactory;
+import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -111,7 +112,7 @@ import java.util.stream.Collectors;
  */
 @Mojo(name = "nar", defaultPhase = LifecyclePhase.PACKAGE, threadSafe = true, requiresDependencyResolution = ResolutionScope.RUNTIME)
 public class NarMojo extends AbstractMojo {
-    private static final String SERVICES_DIRECTORY = "META-INF/services/";
+    private static final String CONTROLLER_SERVICE_CLASS_NAME = "org.apache.nifi.controller.ControllerService";
     private static final String DOCUMENTATION_WRITER_CLASS_NAME = "org.apache.nifi.documentation.xml.XmlDocumentationWriter";
 
     private static final String[] DEFAULT_EXCLUDES = new String[]{"**/package.html"};
@@ -550,11 +551,44 @@ public class NarMojo extends AbstractMojo {
             try {
                 xmlWriter.writeStartElement("extensionManifest");
 
+                // Write current NAR information
+                writeXmlTag(xmlWriter, "groupId", narGroup);
+                writeXmlTag(xmlWriter, "artifactId", narId);
+                writeXmlTag(xmlWriter, "version", narVersion);
+
+                // Write parent NAR information
+                final NarDependency narDependency = getNarDependency();
+                if (narDependency != null) {
+                    xmlWriter.writeStartElement("parentNar");
+                    writeXmlTag(xmlWriter, "groupId", notEmpty(this.narDependencyGroup) ? this.narDependencyGroup : narDependency.getGroupId());
+                    writeXmlTag(xmlWriter, "artifactId", notEmpty(this.narDependencyId) ? this.narDependencyId : narDependency.getArtifactId());
+                    writeXmlTag(xmlWriter, "version", notEmpty(this.narDependencyVersion) ? this.narDependencyVersion : narDependency.getVersion());
+                    xmlWriter.writeEndElement();
+                }
+
+                // Write system API version
                 final String nifiApiVersion = extensionClassLoader.getNiFiApiVersion();
                 xmlWriter.writeStartElement("systemApiVersion");
                 xmlWriter.writeCharacters(nifiApiVersion);
                 xmlWriter.writeEndElement();
 
+                // Write build info
+                xmlWriter.writeStartElement("buildInfo");
+                if (notEmpty(buildTag)) {
+                    writeXmlTag(xmlWriter, "tag", buildTag);
+                }
+                if (notEmpty(buildBranch)) {
+                    writeXmlTag(xmlWriter, "branch", buildBranch);
+                }
+                if (notEmpty(buildRevision)) {
+                    writeXmlTag(xmlWriter, "revision", buildRevision);
+                }
+
+                final SimpleDateFormat dateFormat = new SimpleDateFormat(BUILD_TIMESTAMP_FORMAT);
+                writeXmlTag(xmlWriter, "timestamp", dateFormat.format(new Date()));
+                xmlWriter.writeEndElement();
+
+                // Write extensions
                 xmlWriter.writeStartElement("extensions");
 
                 final Class<?> docWriterClass;
@@ -595,6 +629,12 @@ public class NarMojo extends AbstractMojo {
         } catch (final Exception ioe) {
             throw new MojoExecutionException("Failed to create Extension Documentation", ioe);
         }
+    }
+
+    private void writeXmlTag(final XMLStreamWriter xmlWriter, final String tagName, final String value) throws XMLStreamException {
+        xmlWriter.writeStartElement(tagName);
+        xmlWriter.writeCharacters(value);
+        xmlWriter.writeEndElement();
     }
 
     private void writeDocumentation(final Set<ExtensionDefinition> extensionDefinitions, final ExtensionClassLoader classLoader,
@@ -700,8 +740,18 @@ public class NarMojo extends AbstractMojo {
             }
 
             final Class<?> serviceDefinitionClass = (Class<?>) serviceDefinition;
+            if (CONTROLLER_SERVICE_CLASS_NAME.equals(serviceDefinitionClass.getName())) {
+                continue;
+            }
+
             final ExtensionClassLoader extensionClassLoader = (ExtensionClassLoader) serviceDefinitionClass.getClassLoader();
             final Artifact narArtifact = extensionClassLoader.getNarArtifact();
+
+            if (narArtifact == null) {
+                getLog().warn("Could not find NAR Artifact for Controller Service Definition " + serviceDefinitionClass.getName() +
+                        ". Documentation may  not show appropriate linkage to Controller Service.");
+                continue;
+            }
 
             final ServiceAPIDefinition serviceAPIDefinition = new StandardServiceAPIDefinition(
                     serviceDefinitionClass.getName(),
@@ -809,15 +859,14 @@ public class NarMojo extends AbstractMojo {
 
     private void copyDependencies() throws MojoExecutionException {
         DependencyStatusSets dss = getDependencySets(this.failOnMissingClassifierArtifact);
-        Set artifacts = dss.getResolvedDependencies();
+        Set<Artifact> artifacts = dss.getResolvedDependencies();
 
-        for (Object artifactObj : artifacts) {
-            copyArtifact((Artifact) artifactObj);
+        for (Artifact artifact : artifacts) {
+            copyArtifact(artifact);
         }
 
         artifacts = dss.getSkippedDependencies();
-        for (Object artifactOjb : artifacts) {
-            Artifact artifact = (Artifact) artifactOjb;
+        for (Artifact artifact : artifacts) {
             getLog().debug(artifact.getFile().getName() + " already exists in destination.");
         }
     }
