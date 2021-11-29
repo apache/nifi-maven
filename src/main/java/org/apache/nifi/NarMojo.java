@@ -466,6 +466,12 @@ public class NarMojo extends AbstractMojo {
     @Parameter(property = "buildRevision", defaultValue = "${buildRevision}", required = false)
     protected String buildRevision;
 
+    @Parameter(property = "buildJdk", defaultValue = "${java.version}", required = false)
+    protected String buildJdk;
+
+    @Parameter(property = "builtBy", defaultValue = "${user.name}", required = false)
+    protected String builtBy;
+
     /**
      * Allows a NAR to specify if it's resources should be cloned when a component that depends on this NAR
      * is performing class loader isolation.
@@ -582,6 +588,12 @@ public class NarMojo extends AbstractMojo {
                 }
                 if (notEmpty(buildRevision)) {
                     writeXmlTag(xmlWriter, "revision", buildRevision);
+                }
+                if (notEmpty(buildJdk)) {
+                    writeXmlTag(xmlWriter, "jdk", buildJdk);
+                }
+                if (notEmpty(builtBy)) {
+                    writeXmlTag(xmlWriter, "builtBy", builtBy);
                 }
 
                 final SimpleDateFormat dateFormat = new SimpleDateFormat(BUILD_TIMESTAMP_FORMAT);
