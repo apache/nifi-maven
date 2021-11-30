@@ -23,7 +23,7 @@
     </parent>
     <groupId>org.apache.nifi</groupId>
     <artifactId>nifi-nar-maven-plugin</artifactId>
-    <version>1.3.3</version>
+    <version>1.3.4-SNAPSHOT</version>
     <packaging>maven-plugin</packaging>
     <description>Apache NiFi Nar Maven Plugin</description>
     <url>http://nifi.apache.org</url>
@@ -67,7 +67,7 @@
         <connection>scm:git:git://git.apache.org/nifi-maven.git</connection>
         <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/nifi-maven.git</developerConnection>
         <url>https://git-wip-us.apache.org/repos/asf?p=nifi-maven.git</url>
-        <tag>nifi-nar-maven-plugin-1.3.3-RC1</tag>
+        <tag>HEAD</tag>
     </scm>
     <issueManagement>
         <system>JIRA</system>
