@@ -351,6 +351,11 @@
     <dependencies>
         <dependency>
             <groupId>org.apache.maven</groupId>
+            <artifactId>maven-archiver</artifactId>
+            <version>3.5.2</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.maven</groupId>
             <artifactId>maven-plugin-api</artifactId>
             <version>3.1.1</version>
         </dependency>
@@ -369,6 +374,28 @@
             <artifactId>maven-dependency-plugin</artifactId>
             <type>maven-plugin</type>
             <version>2.9</version>
+            <exclusions>
+            	<exclusion>
+            		<groupId>org.apache.maven.doxia</groupId>
+            		<artifactId>doxia-site-renderer</artifactId>
+            	</exclusion>
+            	<exclusion>
+            		<groupId>org.apache.maven.reporting</groupId>
+            		<artifactId>maven-reporting-api</artifactId>
+            	</exclusion>
+            	<exclusion>
+            		<groupId>org.apache.maven.reporting</groupId>
+            		<artifactId>maven-reporting-impl</artifactId>
+            	</exclusion>
+            	<exclusion>
+            		<groupId>org.apache.maven.doxia</groupId>
+            		<artifactId>doxia-sink-api</artifactId>
+            	</exclusion>
+            	<exclusion>
+            		<groupId>org.codehaus.plexus</groupId>
+            		<artifactId>plexus-io</artifactId>
+            	</exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.maven.shared</groupId>
