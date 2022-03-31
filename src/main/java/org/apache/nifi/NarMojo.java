@@ -91,6 +91,7 @@ import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.Enumeration;
 import java.util.HashMap;
@@ -98,6 +99,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.stream.Collectors;
@@ -466,12 +468,6 @@ public class NarMojo extends AbstractMojo {
     @Parameter(property = "buildRevision", defaultValue = "${buildRevision}", required = false)
     protected String buildRevision;
 
-    @Parameter(property = "buildJdk", defaultValue = "${java.version}", required = false)
-    protected String buildJdk;
-
-    @Parameter(property = "builtBy", defaultValue = "${user.name}", required = false)
-    protected String builtBy;
-
     /**
      * Allows a NAR to specify if it's resources should be cloned when a component that depends on this NAR
      * is performing class loader isolation.
@@ -496,6 +492,15 @@ public class NarMojo extends AbstractMojo {
     @Component
     private ProjectBuilder projectBuilder;
 
+    /**
+     * Timestamp for reproducible output archive entries, either formatted as ISO 8601
+     * <code>yyyy-MM-dd'T'HH:mm:ssXXX</code> or as an int representing seconds since the epoch (like
+     * <a href="https://reproducible-builds.org/docs/source-date-epoch/">SOURCE_DATE_EPOCH</a>).
+     *
+     * @since 3.2.3
+     */
+    @Parameter( defaultValue = "${project.build.outputTimestamp}" )
+    private String outputTimestamp;
 
 
     @Override
@@ -589,15 +594,6 @@ public class NarMojo extends AbstractMojo {
                 if (notEmpty(buildRevision)) {
                     writeXmlTag(xmlWriter, "revision", buildRevision);
                 }
-                if (notEmpty(buildJdk)) {
-                    writeXmlTag(xmlWriter, "jdk", buildJdk);
-                }
-                if (notEmpty(builtBy)) {
-                    writeXmlTag(xmlWriter, "builtBy", builtBy);
-                }
-
-                final SimpleDateFormat dateFormat = new SimpleDateFormat(BUILD_TIMESTAMP_FORMAT);
-                writeXmlTag(xmlWriter, "timestamp", dateFormat.format(new Date()));
                 xmlWriter.writeEndElement();
 
                 // Write extensions
@@ -653,11 +649,18 @@ public class NarMojo extends AbstractMojo {
                                     final Class<?> docWriterClass, final XMLStreamWriter xmlWriter, final File additionalDetailsDir)
         throws InvocationTargetException, NoSuchMethodException, ClassNotFoundException, InstantiationException, IllegalAccessException, IOException {
 
-        for (final ExtensionDefinition definition : extensionDefinitions) {
+        final Set<ExtensionDefinition> sorted = new TreeSet<>(new Comparator<ExtensionDefinition>() {
+            public int compare(ExtensionDefinition e1, ExtensionDefinition e2) {
+                return e1.getExtensionName().compareTo(e2.getExtensionName());
+            }
+        });
+        sorted.addAll(extensionDefinitions);
+
+        for (final ExtensionDefinition definition : sorted) {
             writeDocumentation(definition, classLoader, docWriterClass, xmlWriter);
         }
 
-        final Set<String> extensionNames = extensionDefinitions.stream()
+        final Set<String> extensionNames = sorted.stream()
             .map(ExtensionDefinition::getExtensionName)
             .collect(Collectors.toSet());
 
@@ -1028,8 +1031,10 @@ public class NarMojo extends AbstractMojo {
         final File outputDirectory = projectBuildDirectory;
         File narFile = getNarFile(outputDirectory, finalName, classifier);
         MavenArchiver archiver = new MavenArchiver();
+        archiver.setCreatedBy("Apache NiFi Nar Maven Plugin", "org.apache.nifi", "nifi-nar-maven-plugin");
         archiver.setArchiver(jarArchiver);
         archiver.setOutputFile(narFile);
+        Date timestamp = archiver.configureReproducible(outputTimestamp); // configure for Reproducible Builds based on outputTimestamp value
         archive.setForced(forceCreation);
 
         try {
@@ -1088,7 +1093,7 @@ public class NarMojo extends AbstractMojo {
             }
 
             SimpleDateFormat dateFormat = new SimpleDateFormat(BUILD_TIMESTAMP_FORMAT);
-            archive.addManifestEntry("Build-Timestamp", dateFormat.format(new Date()));
+            archive.addManifestEntry("Build-Timestamp", dateFormat.format(timestamp == null ? new Date() : timestamp));
 
             archive.addManifestEntry("Clone-During-Instance-Class-Loading", String.valueOf(cloneDuringInstanceClassLoading));
 
