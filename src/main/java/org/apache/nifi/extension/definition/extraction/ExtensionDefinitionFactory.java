@@ -83,22 +83,30 @@ public class ExtensionDefinitionFactory {
 
         final Set<ServiceAPIDefinition> serviceApis = new HashSet<>();
         final Class<?> controllerServiceClass = Class.forName("org.apache.nifi.controller.ControllerService", false, extensionClassLoader);
+        addProvidedServiceAPIs(controllerServiceClass, extensionClass, serviceApis);
+        return serviceApis;
+    }
 
-        for (final Class<?> implementedInterface : extensionClass.getInterfaces()) {
-            if (controllerServiceClass.isAssignableFrom(implementedInterface)) {
-                final ClassLoader interfaceClassLoader = implementedInterface.getClassLoader();
-                if (interfaceClassLoader instanceof ExtensionClassLoader) {
-                    final Artifact interfaceNarArtifact = ((ExtensionClassLoader) interfaceClassLoader).getNarArtifact();
+    private void addProvidedServiceAPIs(final Class<?> controllerServiceClass, final Class<?> extensionClass, final Set<ServiceAPIDefinition> serviceApis) {
+        if (extensionClass.getInterfaces() != null) {
+            for (final Class<?> implementedInterface : extensionClass.getInterfaces()) {
+                if (controllerServiceClass.isAssignableFrom(implementedInterface) && !controllerServiceClass.equals(implementedInterface)) {
+                    final ClassLoader interfaceClassLoader = implementedInterface.getClassLoader();
+                    if (interfaceClassLoader instanceof ExtensionClassLoader) {
+                        final Artifact interfaceNarArtifact = ((ExtensionClassLoader) interfaceClassLoader).getNarArtifact();
 
-                    final ServiceAPIDefinition serviceDefinition = new StandardServiceAPIDefinition(implementedInterface.getName(),
-                        interfaceNarArtifact.getGroupId(), interfaceNarArtifact.getArtifactId(), interfaceNarArtifact.getBaseVersion());
+                        final ServiceAPIDefinition serviceDefinition = new StandardServiceAPIDefinition(implementedInterface.getName(),
+                                interfaceNarArtifact.getGroupId(), interfaceNarArtifact.getArtifactId(), interfaceNarArtifact.getBaseVersion());
 
-                    serviceApis.add(serviceDefinition);
+                        serviceApis.add(serviceDefinition);
+                    }
                 }
             }
         }
 
-        return serviceApis;
+        if (extensionClass.getSuperclass() != null) {
+            addProvidedServiceAPIs(controllerServiceClass, extensionClass.getSuperclass(), serviceApis);
+        }
     }
 
     private Set<String> discoverClassNames(final String extensionType) throws IOException {
