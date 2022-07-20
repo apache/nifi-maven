@@ -88,24 +88,51 @@ public class ExtensionDefinitionFactory {
     }
 
     private void addProvidedServiceAPIs(final Class<?> controllerServiceClass, final Class<?> extensionClass, final Set<ServiceAPIDefinition> serviceApis) {
-        if (extensionClass.getInterfaces() != null) {
-            for (final Class<?> implementedInterface : extensionClass.getInterfaces()) {
-                if (controllerServiceClass.isAssignableFrom(implementedInterface) && !controllerServiceClass.equals(implementedInterface)) {
-                    final ClassLoader interfaceClassLoader = implementedInterface.getClassLoader();
-                    if (interfaceClassLoader instanceof ExtensionClassLoader) {
-                        final Artifact interfaceNarArtifact = ((ExtensionClassLoader) interfaceClassLoader).getNarArtifact();
+        final Class<?>[] extensionInterfaces = extensionClass.getInterfaces();
+        if (extensionInterfaces == null) {
+            return;
+        }
 
-                        final ServiceAPIDefinition serviceDefinition = new StandardServiceAPIDefinition(implementedInterface.getName(),
-                                interfaceNarArtifact.getGroupId(), interfaceNarArtifact.getArtifactId(), interfaceNarArtifact.getBaseVersion());
+        for (final Class<?> immediateInterface : extensionInterfaces) {
+            final Set<Class<?>> interfaceHierarchy = new HashSet<>();
+            interfaceHierarchy.add(immediateInterface);
+            getInterfaceHierarchy(immediateInterface, interfaceHierarchy);
 
-                        serviceApis.add(serviceDefinition);
-                    }
-                }
+            for (final Class<?> implementedInterface : interfaceHierarchy) {
+                processImplementedInterface(implementedInterface, controllerServiceClass, serviceApis);
             }
         }
 
         if (extensionClass.getSuperclass() != null) {
             addProvidedServiceAPIs(controllerServiceClass, extensionClass.getSuperclass(), serviceApis);
+        }
+    }
+
+    private void getInterfaceHierarchy(final Class<?> implementedInterface, final Set<Class<?>> interfaceHierarchy) {
+        final Class<?>[] parentInterfaces = implementedInterface.getInterfaces();
+        if (parentInterfaces == null) {
+            return;
+        }
+
+        for (final Class<?> parentInterface : parentInterfaces) {
+            if (!interfaceHierarchy.contains(parentInterface)) {
+                interfaceHierarchy.add(parentInterface);
+                getInterfaceHierarchy(parentInterface, interfaceHierarchy);
+            }
+        }
+    }
+
+    private void processImplementedInterface(final Class<?> implementedInterface, final Class<?> controllerServiceClass, final Set<ServiceAPIDefinition> serviceApis) {
+        if (controllerServiceClass.isAssignableFrom(implementedInterface) && !controllerServiceClass.equals(implementedInterface)) {
+            final ClassLoader interfaceClassLoader = implementedInterface.getClassLoader();
+            if (interfaceClassLoader instanceof ExtensionClassLoader) {
+                final Artifact interfaceNarArtifact = ((ExtensionClassLoader) interfaceClassLoader).getNarArtifact();
+
+                final ServiceAPIDefinition serviceDefinition = new StandardServiceAPIDefinition(implementedInterface.getName(),
+                        interfaceNarArtifact.getGroupId(), interfaceNarArtifact.getArtifactId(), interfaceNarArtifact.getBaseVersion());
+
+                serviceApis.add(serviceDefinition);
+            }
         }
     }
 

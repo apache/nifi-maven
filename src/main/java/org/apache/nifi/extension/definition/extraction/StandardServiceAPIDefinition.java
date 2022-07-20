@@ -18,6 +18,8 @@ package org.apache.nifi.extension.definition.extraction;
 
 import org.apache.nifi.extension.definition.ServiceAPIDefinition;
 
+import java.util.Objects;
+
 public class StandardServiceAPIDefinition implements ServiceAPIDefinition {
     private final String serviceAPIClassName;
     private final String serviceGroupId;
@@ -49,5 +51,27 @@ public class StandardServiceAPIDefinition implements ServiceAPIDefinition {
     @Override
     public String getServiceVersion() {
         return serviceVersion;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
+        final StandardServiceAPIDefinition that = (StandardServiceAPIDefinition) o;
+        return serviceAPIClassName.equals(that.serviceAPIClassName)
+                && serviceGroupId.equals(that.serviceGroupId)
+                && serviceArtifactId.equals(that.serviceArtifactId)
+                && serviceVersion.equals(that.serviceVersion);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(serviceAPIClassName, serviceGroupId, serviceArtifactId, serviceVersion);
     }
 }
