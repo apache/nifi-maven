@@ -99,6 +99,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TimeZone;
 import java.util.TreeSet;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
@@ -1093,6 +1094,7 @@ public class NarMojo extends AbstractMojo {
             }
 
             SimpleDateFormat dateFormat = new SimpleDateFormat(BUILD_TIMESTAMP_FORMAT);
+            dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
             archive.addManifestEntry("Build-Timestamp", dateFormat.format(timestamp == null ? new Date() : timestamp));
 
             archive.addManifestEntry("Clone-During-Instance-Class-Loading", String.valueOf(cloneDuringInstanceClassLoading));
