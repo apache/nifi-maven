@@ -100,8 +100,7 @@ public class ExtensionClassLoaderFactory {
 
         final Artifact nar = removeNarArtifact(artifacts);
         if (nar == null) {
-            final ExtensionClassLoader providedEntityClassLoader = createProvidedEntitiesClassLoader(artifactsHolder);
-            return createClassLoader(artifacts, providedEntityClassLoader, null);
+            return createProvidedEntitiesClassLoader(artifactsHolder);
         }
 
         final Set<Artifact> narDependencies = getNarDependencies(nar);
