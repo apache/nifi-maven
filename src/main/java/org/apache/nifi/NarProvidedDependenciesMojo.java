@@ -33,17 +33,15 @@ import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.ProjectBuilder;
 import org.apache.maven.project.ProjectBuildingException;
 import org.apache.maven.project.ProjectBuildingRequest;
-import org.apache.maven.project.ProjectBuildingResult;
 import org.apache.maven.shared.dependency.graph.DependencyGraphBuilder;
 import org.apache.maven.shared.dependency.graph.DependencyGraphBuilderException;
 import org.apache.maven.shared.dependency.graph.DependencyNode;
 import org.apache.maven.shared.dependency.graph.traversal.DependencyNodeVisitor;
+import org.apache.nifi.utils.NarDependencyUtils;
 import org.eclipse.aether.RepositorySystemSession;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Generates the listing of dependencies that is provided by the NAR dependency of the current NAR. This is important as artifacts that bundle dependencies will
@@ -52,8 +50,6 @@ import java.util.Map;
  */
 @Mojo(name = "provided-nar-dependencies", defaultPhase = LifecyclePhase.PACKAGE, threadSafe = true, requiresDependencyResolution = ResolutionScope.RUNTIME)
 public class NarProvidedDependenciesMojo extends AbstractMojo {
-
-    private static final String NAR = "nar";
 
     /**
      * The Maven project.
@@ -105,46 +101,13 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         try {
-            // find the nar dependency
-            Artifact narArtifact = null;
-            for (final Artifact artifact : project.getDependencyArtifacts()) {
-                if (NAR.equals(artifact.getType())) {
-                    // ensure the project doesn't have two nar dependencies
-                    if (narArtifact != null) {
-                        throw new MojoExecutionException("Project can only have one NAR dependency.");
-                    }
-
-                    // record the nar dependency
-                    narArtifact = artifact;
-                }
-            }
-
-            // ensure there is a nar dependency
-            if (narArtifact == null) {
-                throw new MojoExecutionException("Project does not have any NAR dependencies.");
-            }
-
+            NarDependencyUtils.ensureSingleNarDependencyExists(project);
             // build the project for the nar artifact
             final ProjectBuildingRequest narRequest = new DefaultProjectBuildingRequest();
             narRequest.setRepositorySession(repoSession);
             narRequest.setSystemProperties(System.getProperties());
 
-            final ProjectBuildingResult narResult = projectBuilder.build(narArtifact, narRequest);
-            narRequest.setProject(narResult.getProject());
-
-            // get the artifact handler for excluding dependencies
-            final ArtifactHandler narHandler = excludesDependencies(narArtifact);
-            narArtifact.setArtifactHandler(narHandler);
-
-            // nar artifacts by nature includes dependencies, however this prevents the
-            // transitive dependencies from printing using tools like dependency:tree.
-            // here we are overriding the artifact handler for all nars so the
-            // dependencies can be listed. this is important because nar dependencies
-            // will be used as the parent classloader for this nar and seeing what
-            // dependencies are provided is critical.
-            final Map<String, ArtifactHandler> narHandlerMap = new HashMap<>();
-            narHandlerMap.put(NAR, narHandler);
-            artifactHandlerManager.addHandlers(narHandlerMap);
+            artifactHandlerManager.addHandlers(NarDependencyUtils.createNarHandlerMap(narRequest, project, projectBuilder));
 
             // get the dependency tree
             final DependencyNode root = dependencyGraphBuilder.buildDependencyGraph(narRequest, null);
@@ -164,7 +127,7 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
 
             // visit and print the results
             root.accept(visitor);
-            getLog().info("--- Provided NAR Dependencies ---\n\n" + visitor.toString());
+            getLog().info("--- Provided NAR Dependencies ---" + System.lineSeparator() + System.lineSeparator() + visitor);
         } catch (ProjectBuildingException | DependencyGraphBuilderException e) {
             throw new MojoExecutionException("Cannot build project dependency tree", e);
         }
@@ -180,59 +143,10 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
     }
 
     /**
-     * Creates a new ArtifactHandler for the specified Artifact that overrides the includeDependencies flag. When set, this flag prevents transitive
-     * dependencies from being printed in dependencies plugin.
-     *
-     * @param artifact  The artifact
-     * @return          The handler for the artifact
-     */
-    private ArtifactHandler excludesDependencies(final Artifact artifact) {
-        final ArtifactHandler orig = artifact.getArtifactHandler();
-
-        return new ArtifactHandler() {
-            @Override
-            public String getExtension() {
-                return orig.getExtension();
-            }
-
-            @Override
-            public String getDirectory() {
-                return orig.getDirectory();
-            }
-
-            @Override
-            public String getClassifier() {
-                return orig.getClassifier();
-            }
-
-            @Override
-            public String getPackaging() {
-                return orig.getPackaging();
-            }
-
-            // mark dependencies has excluded so they will appear in tree listing
-            @Override
-            public boolean isIncludesDependencies() {
-                return false;
-            }
-
-            @Override
-            public String getLanguage() {
-                return orig.getLanguage();
-            }
-
-            @Override
-            public boolean isAddedToClasspath() {
-                return orig.isAddedToClasspath();
-            }
-        };
-    }
-
-    /**
      * Returns whether the specified dependency has test scope.
      *
-     * @param node  The dependency
-     * @return      What the dependency is a test scoped dep
+     * @param node The dependency
+     * @return What the dependency is a test scoped dep
      */
     private boolean isTest(final DependencyNode node) {
         return "test".equals(node.getArtifact().getScope());
@@ -265,7 +179,7 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
             pad.append("+- ");
 
             // log it
-            output.append(pad).append(node.toNodeString()).append("\n");
+            output.append(pad).append(node.toNodeString()).append(System.lineSeparator());
 
             return true;
         }
@@ -296,13 +210,13 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
             }
 
             final Artifact artifact = node.getArtifact();
-            if (!NAR.equals(artifact.getType())) {
-                output.append("<dependency>\n");
-                output.append("    <groupId>").append(artifact.getGroupId()).append("</groupId>\n");
-                output.append("    <artifactId>").append(artifact.getArtifactId()).append("</artifactId>\n");
-                output.append("    <version>").append(artifact.getVersion()).append("</version>\n");
-                output.append("    <scope>provided</scope>\n");
-                output.append("</dependency>\n");
+            if (!NarDependencyUtils.NAR.equals(artifact.getType())) {
+                output.append("<dependency>").append(System.lineSeparator());
+                output.append("    <groupId>").append(artifact.getGroupId()).append("</groupId>").append(System.lineSeparator());
+                output.append("    <artifactId>").append(artifact.getArtifactId()).append("</artifactId>").append(System.lineSeparator());
+                output.append("    <version>").append(artifact.getVersion()).append("</version>").append(System.lineSeparator());
+                output.append("    <scope>provided</scope>").append(System.lineSeparator());
+                output.append("</dependency>").append(System.lineSeparator());
             }
 
             return true;
