@@ -34,10 +34,9 @@ import org.apache.maven.project.ProjectBuildingException;
 import org.apache.maven.project.ProjectBuildingRequest;
 import org.apache.maven.shared.dependency.graph.DependencyCollectorBuilder;
 import org.apache.maven.shared.dependency.graph.DependencyCollectorBuilderException;
-import org.apache.maven.shared.dependency.graph.DependencyGraphBuilder;
 import org.apache.maven.shared.dependency.graph.DependencyNode;
 import org.apache.maven.shared.dependency.graph.traversal.DependencyNodeVisitor;
-import org.apache.nifi.utils.Utils;
+import org.apache.nifi.utils.NarDependencyUtils;
 import org.eclipse.aether.RepositorySystemSession;
 
 import java.util.ArrayList;
@@ -51,9 +50,6 @@ import java.util.HashMap;
  */
 @Mojo(name = "duplicate-nar-dependencies", defaultPhase = LifecyclePhase.PACKAGE, threadSafe = true, requiresDependencyResolution = ResolutionScope.RUNTIME)
 public class NarDuplicateDependenciesMojo extends AbstractMojo {
-
-
-    private static final String NAR = "nar";
 
     /**
      * The Maven project.
@@ -94,20 +90,20 @@ public class NarDuplicateDependenciesMojo extends AbstractMojo {
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         try {
-            Utils.ensureSingleNarDependencyExists(project);
+            NarDependencyUtils.ensureSingleNarDependencyExists(project);
             // build the project for the nar artifact
             final ProjectBuildingRequest narRequest = new DefaultProjectBuildingRequest();
             narRequest.setRepositorySession(repoSession);
             narRequest.setSystemProperties(System.getProperties());
 
-            artifactHandlerManager.addHandlers(Utils.createNarHandlerMap(narRequest, project, projectBuilder));
+            artifactHandlerManager.addHandlers(NarDependencyUtils.createNarHandlerMap(narRequest, project, projectBuilder));
 
             // get the dependency tree
             final DependencyNode root = dependencyCollectorBuilder.collectDependencyGraph(narRequest, null);
 
             DependencyNode narParent = root.getChildren()
                     .stream()
-                    .filter(child -> NAR.equals(child.getArtifact().getType()))
+                    .filter(child -> NarDependencyUtils.NAR.equals(child.getArtifact().getType()))
                     .findFirst()
                     .orElseThrow(() -> new MojoExecutionException("Project does not have any NAR dependencies."));
 
@@ -126,7 +122,7 @@ public class NarDuplicateDependenciesMojo extends AbstractMojo {
                     }
                     Artifact artifact = node.getArtifact();
                     hierarchy.push(artifact);
-                    if ("compile".equals(artifact.getScope()) && !NAR.equals(artifact.getType())) {
+                    if (NarDependencyUtils.COMPILE_STRING.equals(artifact.getScope()) && !NarDependencyUtils.NAR.equals(artifact.getType())) {
                         directDependencies.put(artifact.toString(), new ArrayList<>(hierarchy));
                         return true;
                     }
@@ -142,7 +138,7 @@ public class NarDuplicateDependenciesMojo extends AbstractMojo {
                 }
             });
 
-            List<String> errors = new ArrayList<>();
+            Map<String, List<String>> errors = new HashMap<>();
 
             narParent.accept(new DependencyNodeVisitor() {
                 final Stack<Artifact> hierarchy = new Stack<>();
@@ -151,10 +147,8 @@ public class NarDuplicateDependenciesMojo extends AbstractMojo {
                 public boolean visit(DependencyNode node) {
                     Artifact artifact = node.getArtifact();
                     hierarchy.push(artifact);
-                    if ("compile".equals(artifact.getScope()) && directDependencies.containsKey(artifact.toString())) {
-                        StringBuilder sb = new StringBuilder()
-                                .append(artifact).append(" already included in the bundle\n")
-                                .append(root.getArtifact()).append(" (this nar)\n");
+                    if (NarDependencyUtils.COMPILE_STRING.equals(artifact.getScope()) && directDependencies.containsKey(artifact.toString())) {
+                        StringBuilder sb = new StringBuilder().append(root.getArtifact()).append(" (this nar)").append(System.lineSeparator());
                         List<Artifact> otherHierarchy = directDependencies.get(artifact.toString());
                         // print other hierarchy
                         for (int i = 0; i < otherHierarchy.size(); i++) {
@@ -163,7 +157,7 @@ public class NarDuplicateDependenciesMojo extends AbstractMojo {
                             if (i == otherHierarchy.size() - 1) {
                                 sb.append(" (duplicate)");
                             }
-                            sb.append("\n");
+                            sb.append(System.lineSeparator());
                         }
                         // print this hierarchy
                         for (int i = 0; i < hierarchy.size(); i++) {
@@ -172,9 +166,9 @@ public class NarDuplicateDependenciesMojo extends AbstractMojo {
                             if (i == hierarchy.size() - 1) {
                                 sb.append(" (already included here)");
                             }
-                            sb.append("\n");
+                            sb.append(System.lineSeparator());
                         }
-                        errors.add(sb.toString());
+                        errors.computeIfAbsent(artifact.toString(), k -> new ArrayList<>()).add(sb.toString());
                     }
                     return true;
                 }
@@ -186,9 +180,20 @@ public class NarDuplicateDependenciesMojo extends AbstractMojo {
                 }
             });
 
+            for (Map.Entry<String, List<String>> entry : errors.entrySet()) {
+                StringBuilder sb = new StringBuilder().append(entry.getKey()).append(" is already included in the nar");
+                if (entry.getValue().size() > 1) {
+                    sb.append(" multiple times");
+                }
+                sb.append(":");
+                for (String error : entry.getValue()) {
+                    sb.append(System.lineSeparator()).append(error);
+                }
+                getLog().error(sb.toString());
+            }
+
             if (!errors.isEmpty()) {
-                errors.forEach(getLog()::error);
-                getLog().info("Consider changing the scope from \"compile\" to \"provided\" or exclude it in case it's a transitive dependency.\n\n");
+                getLog().info("Consider changing the scope from \"compile\" to \"provided\" or exclude it in case it's a transitive dependency.");
                 throw new MojoFailureException("Found duplicate dependencies");
             }
 

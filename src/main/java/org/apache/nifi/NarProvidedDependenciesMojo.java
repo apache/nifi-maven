@@ -37,7 +37,7 @@ import org.apache.maven.shared.dependency.graph.DependencyGraphBuilder;
 import org.apache.maven.shared.dependency.graph.DependencyGraphBuilderException;
 import org.apache.maven.shared.dependency.graph.DependencyNode;
 import org.apache.maven.shared.dependency.graph.traversal.DependencyNodeVisitor;
-import org.apache.nifi.utils.Utils;
+import org.apache.nifi.utils.NarDependencyUtils;
 import org.eclipse.aether.RepositorySystemSession;
 
 import java.util.ArrayDeque;
@@ -50,8 +50,6 @@ import java.util.Deque;
  */
 @Mojo(name = "provided-nar-dependencies", defaultPhase = LifecyclePhase.PACKAGE, threadSafe = true, requiresDependencyResolution = ResolutionScope.RUNTIME)
 public class NarProvidedDependenciesMojo extends AbstractMojo {
-
-    private static final String NAR = "nar";
 
     /**
      * The Maven project.
@@ -103,13 +101,13 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         try {
-            Utils.ensureSingleNarDependencyExists(project);
+            NarDependencyUtils.ensureSingleNarDependencyExists(project);
             // build the project for the nar artifact
             final ProjectBuildingRequest narRequest = new DefaultProjectBuildingRequest();
             narRequest.setRepositorySession(repoSession);
             narRequest.setSystemProperties(System.getProperties());
 
-            artifactHandlerManager.addHandlers(Utils.createNarHandlerMap(narRequest, project, projectBuilder));
+            artifactHandlerManager.addHandlers(NarDependencyUtils.createNarHandlerMap(narRequest, project, projectBuilder));
 
             // get the dependency tree
             final DependencyNode root = dependencyGraphBuilder.buildDependencyGraph(narRequest, null);
@@ -212,7 +210,7 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
             }
 
             final Artifact artifact = node.getArtifact();
-            if (!NAR.equals(artifact.getType())) {
+            if (!NarDependencyUtils.NAR.equals(artifact.getType())) {
                 output.append("<dependency>\n");
                 output.append("    <groupId>").append(artifact.getGroupId()).append("</groupId>\n");
                 output.append("    <artifactId>").append(artifact.getArtifactId()).append("</artifactId>\n");
