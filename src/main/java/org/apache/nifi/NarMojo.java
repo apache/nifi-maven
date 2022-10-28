@@ -676,7 +676,7 @@ public class NarMojo extends AbstractMojo {
                                     final Class<?> docWriterClass, final XMLStreamWriter xmlWriter)
         throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException, ClassNotFoundException, IOException {
 
-        getLog().debug("Generating documentation for " + extensionDefinition.getExtensionName() + " using ClassLoader:\n" + classLoader.toTree());
+        getLog().debug("Generating documentation for " + extensionDefinition.getExtensionName() + " using ClassLoader:" + System.lineSeparator() + classLoader.toTree());
         final Object docWriter = docWriterClass.getConstructor(XMLStreamWriter.class).newInstance(xmlWriter);
         final Class<?> configurableComponentClass = Class.forName("org.apache.nifi.components.ConfigurableComponent", false, classLoader);
 

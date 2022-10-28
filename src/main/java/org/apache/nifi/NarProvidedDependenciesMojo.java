@@ -127,7 +127,7 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
 
             // visit and print the results
             root.accept(visitor);
-            getLog().info("--- Provided NAR Dependencies ---\n\n" + visitor);
+            getLog().info("--- Provided NAR Dependencies ---" + System.lineSeparator() + System.lineSeparator() + visitor);
         } catch (ProjectBuildingException | DependencyGraphBuilderException e) {
             throw new MojoExecutionException("Cannot build project dependency tree", e);
         }
@@ -179,7 +179,7 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
             pad.append("+- ");
 
             // log it
-            output.append(pad).append(node.toNodeString()).append("\n");
+            output.append(pad).append(node.toNodeString()).append(System.lineSeparator());
 
             return true;
         }
@@ -211,12 +211,12 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
 
             final Artifact artifact = node.getArtifact();
             if (!NarDependencyUtils.NAR.equals(artifact.getType())) {
-                output.append("<dependency>\n");
-                output.append("    <groupId>").append(artifact.getGroupId()).append("</groupId>\n");
-                output.append("    <artifactId>").append(artifact.getArtifactId()).append("</artifactId>\n");
-                output.append("    <version>").append(artifact.getVersion()).append("</version>\n");
-                output.append("    <scope>provided</scope>\n");
-                output.append("</dependency>\n");
+                output.append("<dependency>").append(System.lineSeparator());
+                output.append("    <groupId>").append(artifact.getGroupId()).append("</groupId>").append(System.lineSeparator());
+                output.append("    <artifactId>").append(artifact.getArtifactId()).append("</artifactId>").append(System.lineSeparator());
+                output.append("    <version>").append(artifact.getVersion()).append("</version>").append(System.lineSeparator());
+                output.append("    <scope>provided</scope>").append(System.lineSeparator());
+                output.append("</dependency>").append(System.lineSeparator());
             }
 
             return true;
