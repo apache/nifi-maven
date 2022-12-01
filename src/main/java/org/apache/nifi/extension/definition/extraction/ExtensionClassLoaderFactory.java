@@ -24,6 +24,8 @@ import org.apache.maven.artifact.repository.ArtifactRepository;
 import org.apache.maven.artifact.resolver.ArtifactResolutionRequest;
 import org.apache.maven.artifact.resolver.ArtifactResolutionResult;
 import org.apache.maven.artifact.resolver.ArtifactResolver;
+import org.apache.maven.artifact.resolver.filter.ArtifactFilter;
+import org.apache.maven.artifact.resolver.filter.ExclusionSetFilter;
 import org.apache.maven.artifact.versioning.VersionRange;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.logging.Log;
@@ -51,6 +53,15 @@ import java.util.Set;
 import java.util.TreeSet;
 
 public class ExtensionClassLoaderFactory {
+
+    private final static Set<String> EXCLUDED_ARTIFACT_IDS;
+    static {
+        final Set<String> excludedArtifactIds = new HashSet<>();
+        excludedArtifactIds.add("jdk.tools:jdk.tools");
+        excludedArtifactIds.add("com.sun:tools");
+        EXCLUDED_ARTIFACT_IDS = Collections.unmodifiableSet(excludedArtifactIds);
+    }
+
     private final Log log;
     private final MavenProject project;
     private final RepositorySystemSession repoSession;
@@ -295,14 +306,13 @@ public class ExtensionClassLoaderFactory {
             projectRequest.setLocalRepository(localRepo);
             projectRequest.setProject(mavenProject);
 
-            final DependencyNode depNode = dependencyGraphBuilder.buildDependencyGraph(projectRequest, null);
+            final ArtifactFilter excludesFilter = new ExclusionSetFilter(EXCLUDED_ARTIFACT_IDS);
+            final DependencyNode depNode = dependencyGraphBuilder.buildDependencyGraph(projectRequest, excludesFilter);
             depNode.accept(nodeVisitor);
         } catch (DependencyGraphBuilderException e) {
             throw new MojoExecutionException("Failed to build dependency tree", e);
         }
     }
-
-
 
     private Set<URL> toURLs(final Artifact artifact) throws MojoExecutionException {
         final Set<URL> urls = new HashSet<>();
