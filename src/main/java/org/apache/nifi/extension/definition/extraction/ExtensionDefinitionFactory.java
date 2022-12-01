@@ -137,19 +137,29 @@ public class ExtensionDefinitionFactory {
     }
 
     private Set<String> discoverClassNames(final String extensionType) throws IOException {
-        final Set<String> classNames = new HashSet<>();
+        final Set<URL> resourceUrls = new HashSet<>();
 
         final Enumeration<URL> resources = extensionClassLoader.getResources(SERVICES_DIRECTORY + extensionType);
-
         while (resources.hasMoreElements()) {
-            final URL resourceUrl = resources.nextElement();
-            classNames.addAll(discoverClassNames(extensionClassLoader, resourceUrl));
+            resourceUrls.add(resources.nextElement());
         }
 
+        final ClassLoader parentClassLoader = extensionClassLoader.getParent();
+        if (parentClassLoader != null) {
+            final Enumeration<URL> parentResources = parentClassLoader.getResources(SERVICES_DIRECTORY + extensionType);
+            while (parentResources.hasMoreElements()) {
+                resourceUrls.remove(parentResources.nextElement());
+            }
+        }
+
+        final Set<String> classNames = new HashSet<>();
+        for (final URL resourceUrl : resourceUrls) {
+            classNames.addAll(discoverClassNames(resourceUrl));
+        }
         return classNames;
     }
 
-    private Set<String> discoverClassNames(final ClassLoader classLoader, final URL serviceUrl) throws IOException {
+    private Set<String> discoverClassNames(final URL serviceUrl) throws IOException {
         final Set<String> classNames = new HashSet<>();
 
         try (final InputStream in = serviceUrl.openStream();
