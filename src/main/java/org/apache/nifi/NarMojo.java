@@ -850,15 +850,16 @@ public class NarMojo extends AbstractMojo {
 
     private ExtensionClassLoaderFactory createClassLoaderFactory() {
         return new ExtensionClassLoaderFactory.Builder()
-            .artifactResolver(resolver)
-            .dependencyGraphBuilder(dependencyGraphBuilder)
-            .localRepository(local)
-            .log(getLog())
-            .project(project)
-            .projectBuilder(projectBuilder)
-            .repositorySession(repoSession)
-            .artifactHandlerManager(artifactHandlerManager)
-            .build();
+                .artifactResolver(resolver)
+                .dependencyGraphBuilder(dependencyGraphBuilder)
+                .localRepository(local)
+                .remoteRepositories(remoteRepos)
+                .log(getLog())
+                .project(project)
+                .projectBuilder(projectBuilder)
+                .repositorySession(repoSession)
+                .artifactHandlerManager(artifactHandlerManager)
+                .build();
     }
 
 

@@ -67,6 +67,7 @@ public class ExtensionClassLoaderFactory {
     private final RepositorySystemSession repoSession;
     private final ProjectBuilder projectBuilder;
     private final ArtifactRepository localRepo;
+    private final List<ArtifactRepository> remoteRepos;
     private final DependencyGraphBuilder dependencyGraphBuilder;
     private final ArtifactResolver artifactResolver;
     private final ArtifactHandlerManager artifactHandlerManager;
@@ -77,6 +78,7 @@ public class ExtensionClassLoaderFactory {
         this.repoSession = builder.repositorySession;
         this.projectBuilder = builder.projectBuilder;
         this.localRepo = builder.localRepo;
+        this.remoteRepos = new ArrayList<>(builder.remoteRepos);
         this.dependencyGraphBuilder = builder.dependencyGraphBuilder;
         this.artifactResolver = builder.artifactResolver;
         this.artifactHandlerManager = builder.artifactHandlerManager;
@@ -213,6 +215,7 @@ public class ExtensionClassLoaderFactory {
 
         final ArtifactResolutionRequest request = new ArtifactResolutionRequest();
         request.setLocalRepository(localRepo);
+        request.setRemoteRepositories(remoteRepos);
         request.setArtifact(artifact);
 
         final ArtifactResolutionResult result = artifactResolver.resolve(request);
@@ -323,6 +326,7 @@ public class ExtensionClassLoaderFactory {
 
             final ArtifactResolutionRequest request = new ArtifactResolutionRequest();
             request.setLocalRepository(localRepo);
+            request.setRemoteRepositories(remoteRepos);
             request.setArtifact(artifact);
 
             final ArtifactResolutionResult result = artifactResolver.resolve(request);
@@ -354,6 +358,7 @@ public class ExtensionClassLoaderFactory {
         private Log log;
         private MavenProject project;
         private ArtifactRepository localRepo;
+        private List<ArtifactRepository> remoteRepos;
         private DependencyGraphBuilder dependencyGraphBuilder;
         private ArtifactResolver artifactResolver;
         private ProjectBuilder projectBuilder;
@@ -377,6 +382,11 @@ public class ExtensionClassLoaderFactory {
 
         public Builder localRepository(final ArtifactRepository localRepo) {
             this.localRepo = localRepo;
+            return this;
+        }
+
+        public Builder remoteRepositories(final List<ArtifactRepository> remoteRepos) {
+            this.remoteRepos = remoteRepos;
             return this;
         }
 
