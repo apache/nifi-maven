@@ -51,6 +51,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Supplier;
 
 public class ExtensionClassLoaderFactory {
 
@@ -151,8 +152,7 @@ public class ExtensionClassLoaderFactory {
 
         final ProjectBuildingResult narResult = projectBuilder.build(narArtifact, narRequest);
 
-        final Set<Artifact> narDependencies = new TreeSet<>();
-        gatherArtifacts(narResult.getProject(), narDependencies);
+        final Set<Artifact> narDependencies = gatherArtifacts(narResult.getProject(), TreeSet::new);
         narDependencies.remove(narArtifact);
         narDependencies.remove(project.getArtifact());
 
@@ -179,10 +179,9 @@ public class ExtensionClassLoaderFactory {
         projectRequest.setLocalRepository(localRepo);
 
         for (final Artifact artifact : artifacts) {
-            final Set<Artifact> artifactDependencies = new HashSet<>();
             try {
                 final ProjectBuildingResult projectResult = projectBuilder.build(artifact, projectRequest);
-                gatherArtifacts(projectResult.getProject(), artifactDependencies);
+                final Set<Artifact> artifactDependencies = gatherArtifacts(projectResult.getProject(), HashSet::new);
                 getLog().debug("For Artifact " + artifact + ", found the following dependencies:");
                 artifactDependencies.forEach(dep -> getLog().debug(dep.toString()));
 
@@ -269,7 +268,8 @@ public class ExtensionClassLoaderFactory {
         return createClassLoader(providedArtifacts, null, null);
     }
 
-    private ExtensionClassLoader createClassLoader(final Set<Artifact> artifacts, final ExtensionClassLoader parent, final Artifact narArtifact) throws MojoExecutionException {
+    /* package visible for testing reasons */
+    ExtensionClassLoader createClassLoader(final Set<Artifact> artifacts, final ExtensionClassLoader parent, final Artifact narArtifact) throws MojoExecutionException {
         final Set<URL> urls = new HashSet<>();
         for (final Artifact artifact : artifacts) {
             final Set<URL> artifactUrls = toURLs(artifact);
@@ -287,7 +287,8 @@ public class ExtensionClassLoaderFactory {
     }
 
 
-    private void gatherArtifacts(final MavenProject mavenProject, final Set<Artifact> artifacts) throws MojoExecutionException {
+    private Set<Artifact> gatherArtifacts(final MavenProject mavenProject, final Supplier<Set<Artifact>> setSupplier) throws MojoExecutionException {
+        final Set<Artifact> artifacts = setSupplier.get();
         final DependencyNodeVisitor nodeVisitor = new DependencyNodeVisitor() {
             @Override
             public boolean visit(final DependencyNode dependencyNode) {
@@ -315,6 +316,7 @@ public class ExtensionClassLoaderFactory {
         } catch (DependencyGraphBuilderException e) {
             throw new MojoExecutionException("Failed to build dependency tree", e);
         }
+        return artifacts;
     }
 
     private Set<URL> toURLs(final Artifact artifact) throws MojoExecutionException {
@@ -352,6 +354,9 @@ public class ExtensionClassLoaderFactory {
         return urls;
     }
 
+    public static Builder builder() {
+        return new Builder();
+    }
 
 
     public static class Builder {
