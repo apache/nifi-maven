@@ -29,7 +29,10 @@ import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.ProjectBuilder;
 import org.apache.maven.shared.dependency.graph.DependencyGraphBuilder;
 import org.eclipse.aether.RepositorySystemSession;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.File;
 import java.net.URL;
@@ -50,39 +53,31 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class ExtensionClassLoaderFactoryTest
 {
-    // Mocks
+
+    @Mock private Log log;
+    @Mock private ArtifactResolver artifactResolver;
+    @Mock private ArtifactRepository localRepository;
+    @Mock private ArtifactRepository remoteRepository;
+    @Mock private ArtifactHandlerManager artifactHandlerManager;
+    @Mock private DependencyGraphBuilder dependencyGraphBuilder;
+    @Mock private MavenProject project;
+    @Mock private ProjectBuilder projectBuilder;
+    @Mock private RepositorySystemSession repositorySession;
     private Artifact artifact1;
     private Artifact artifact2;
     private Artifact artifact3;
-    private Log log;
-    private ArtifactResolver artifactResolver;
-    private ArtifactRepository localRepository;
-    private ArtifactRepository remoteRepository;
-    private ArtifactHandlerManager artifactHandlerManager;
-    private DependencyGraphBuilder dependencyGraphBuilder;
-    private MavenProject project;
-    private ProjectBuilder projectBuilder;
-    private RepositorySystemSession repositorySession;
 
     // Test Subject
     private ExtensionClassLoaderFactory factory;
 
     @org.junit.jupiter.api.BeforeEach
-    void setUp() throws Exception {
+    void setUp() {
         artifact1 = projectArtifact();
         artifact2 = localRepositoryDependencyArtifact();
         artifact3 = remoteRepositoryDependencyArtifact();
-        log = mock(Log.class);
-        artifactResolver = mock(ArtifactResolver.class);
-        localRepository = mock(ArtifactRepository.class);
-        remoteRepository = mock(ArtifactRepository.class);
-        artifactHandlerManager = mock(ArtifactHandlerManager.class);
-        dependencyGraphBuilder = mock(DependencyGraphBuilder.class);
-        project = mock(MavenProject.class);
-        projectBuilder = mock(ProjectBuilder.class);
-        repositorySession = mock(RepositorySystemSession.class);
 
         when(artifactResolver.resolve(any(ArtifactResolutionRequest.class)))
                 .thenAnswer(args -> resolved(args.getArgument(0, ArtifactResolutionRequest.class).getArtifact()));
@@ -107,7 +102,7 @@ class ExtensionClassLoaderFactoryTest
         dependencyArtifacts.add(localRepositoryDependencyArtifact());
         dependencyArtifacts.add(remoteRepositoryDependencyArtifact());
 
-        ExtensionClassLoader classLoader = factory.createClassLoader(dependencyArtifacts, null, projectArtifact());
+        ExtensionClassLoader classLoader = factory.createClassLoader(dependencyArtifacts, null, artifact1);
 
         String[] expectedURLs = new String[]{
                 "/path/to/service-api-nar",
