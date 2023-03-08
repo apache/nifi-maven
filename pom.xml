@@ -23,7 +23,7 @@
     </parent>
     <groupId>org.apache.nifi</groupId>
     <artifactId>nifi-nar-maven-plugin</artifactId>
-    <version>1.4.1-SNAPSHOT</version>
+    <version>1.5.0-SNAPSHOT</version>
     <packaging>maven-plugin</packaging>
     <description>Apache NiFi Nar Maven Plugin</description>
     <url>http://nifi.apache.org</url>
@@ -76,10 +76,10 @@
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
-        <maven.min-version>3.1.0</maven.min-version>
+        <maven.min-version>3.6.3</maven.min-version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <project.build.outputTimestamp>2023-01-30T22:57:33Z</project.build.outputTimestamp>
+        <project.build.outputTimestamp>2023-03-08T15:05:37Z</project.build.outputTimestamp>
         <inceptionYear>2014</inceptionYear>
     </properties>
     <build>
@@ -277,28 +277,28 @@
         <dependency>
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-archiver</artifactId>
-            <version>3.5.2</version>
+            <version>3.6.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-plugin-api</artifactId>
-            <version>3.1.1</version>
+            <version>3.9.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-artifact</artifactId>
-            <version>3.1.1</version>
+            <version>3.9.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-compat</artifactId>
-            <version>3.1.1</version>
+            <version>3.9.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-dependency-plugin</artifactId>
             <type>maven-plugin</type>
-            <version>2.9</version>
+            <version>3.5.0</version>
             <exclusions>
             	<exclusion>
             		<groupId>org.apache.maven.doxia</groupId>
@@ -325,20 +325,20 @@
         <dependency>
             <groupId>org.apache.maven.shared</groupId>
             <artifactId>maven-dependency-tree</artifactId>
-            <version>3.2.0</version>
+            <version>3.2.1</version>
         </dependency>
         <dependency>
             <!-- No code from maven-jar-plugin is actually used; it's included
             just to simplify the dependencies list.                     -->
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-jar-plugin</artifactId>
-            <version>3.2.2</version>
+            <version>3.3.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.maven.plugin-tools</groupId>
             <artifactId>maven-plugin-annotations</artifactId>
             <scope>provided</scope>
-            <version>3.3</version>
+            <version>3.6.0</version>
         </dependency>
         <!-- Test Dependencies -->
         <dependency>

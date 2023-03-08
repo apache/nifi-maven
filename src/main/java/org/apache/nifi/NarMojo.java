@@ -24,23 +24,24 @@ import org.apache.maven.artifact.factory.ArtifactFactory;
 import org.apache.maven.artifact.handler.ArtifactHandler;
 import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
 import org.apache.maven.artifact.installer.ArtifactInstaller;
-import org.apache.maven.artifact.metadata.ArtifactMetadataSource;
 import org.apache.maven.artifact.repository.ArtifactRepository;
 import org.apache.maven.artifact.repository.ArtifactRepositoryFactory;
-import org.apache.maven.artifact.resolver.ArtifactCollector;
+import org.apache.maven.artifact.repository.RepositoryRequest;
 import org.apache.maven.artifact.resolver.ArtifactNotFoundException;
 import org.apache.maven.artifact.resolver.ArtifactResolutionException;
+import org.apache.maven.artifact.resolver.ArtifactResolutionRequest;
+import org.apache.maven.artifact.resolver.ArtifactResolutionResult;
 import org.apache.maven.artifact.resolver.ArtifactResolver;
+import org.apache.maven.artifact.resolver.DefaultArtifactResolver;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugin.dependency.utils.DependencyStatusSets;
-import org.apache.maven.plugin.dependency.utils.DependencyUtil;
-import org.apache.maven.plugin.dependency.utils.filters.DestFileFilter;
-import org.apache.maven.plugin.dependency.utils.resolvers.ArtifactsResolver;
-import org.apache.maven.plugin.dependency.utils.resolvers.DefaultArtifactsResolver;
-import org.apache.maven.plugin.dependency.utils.translators.ArtifactTranslator;
-import org.apache.maven.plugin.dependency.utils.translators.ClassifierTypeTranslator;
+import org.apache.maven.plugins.dependency.utils.DependencyStatusSets;
+import org.apache.maven.plugins.dependency.utils.DependencyUtil;
+import org.apache.maven.plugins.dependency.utils.filters.DestFileFilter;
+import org.apache.maven.plugins.dependency.utils.translators.ArtifactTranslator;
+import org.apache.maven.plugins.dependency.utils.translators.ClassifierTypeTranslator;
+
 import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
@@ -59,6 +60,7 @@ import org.apache.maven.shared.artifact.filter.collection.ProjectTransitivityFil
 import org.apache.maven.shared.artifact.filter.collection.ScopeFilter;
 import org.apache.maven.shared.artifact.filter.collection.TypeFilter;
 import org.apache.maven.shared.dependency.graph.DependencyGraphBuilder;
+import org.apache.maven.shared.transfer.artifact.ArtifactCoordinate;
 import org.apache.nifi.extension.definition.ExtensionDefinition;
 import org.apache.nifi.extension.definition.ExtensionType;
 import org.apache.nifi.extension.definition.ServiceAPIDefinition;
@@ -113,6 +115,7 @@ import java.util.stream.Collectors;
  * simplified to the use case of NarMojo.
  *
  */
+@SuppressWarnings("unused")
 @Mojo(name = "nar", defaultPhase = LifecyclePhase.PACKAGE, threadSafe = true, requiresDependencyResolution = ResolutionScope.RUNTIME)
 public class NarMojo extends AbstractMojo {
     private static final String CONTROLLER_SERVICE_CLASS_NAME = "org.apache.nifi.controller.ControllerService";
@@ -212,7 +215,7 @@ public class NarMojo extends AbstractMojo {
      * This only applies if the classifier parameter is used.
      *
      */
-    @Parameter(property = "mdep.failOnMissingClassifierArtifact", defaultValue = "true", required = false)
+    @Parameter(property = "mdep.failOnMissingClassifierArtifact", defaultValue = "true")
     protected boolean failOnMissingClassifierArtifact = true;
 
     /**
@@ -220,7 +223,7 @@ public class NarMojo extends AbstractMojo {
      * everything (default).
      *
      */
-    @Parameter(property = "includeTypes", required = false)
+    @Parameter(property = "includeTypes")
     protected String includeTypes;
 
     /**
@@ -228,21 +231,21 @@ public class NarMojo extends AbstractMojo {
      * exclude anything (default).
      *
      */
-    @Parameter(property = "excludeTypes", required = false)
+    @Parameter(property = "excludeTypes")
     protected String excludeTypes;
 
     /**
      * Scope to include. An Empty string indicates all scopes (default).
      *
      */
-    @Parameter(property = "includeScope", required = false)
+    @Parameter(property = "includeScope")
     protected String includeScope;
 
     /**
      * Scope to exclude. An Empty string indicates no scopes (default).
      *
      */
-    @Parameter(property = "excludeScope", required = false)
+    @Parameter(property = "excludeScope")
     protected String excludeScope;
 
     /**
@@ -250,7 +253,7 @@ public class NarMojo extends AbstractMojo {
      * include everything (default).
      *
      */
-    @Parameter(property = "includeClassifiers", required = false)
+    @Parameter(property = "includeClassifiers")
     protected String includeClassifiers;
 
     /**
@@ -258,14 +261,14 @@ public class NarMojo extends AbstractMojo {
      * don't exclude anything (default).
      *
      */
-    @Parameter(property = "excludeClassifiers", required = false)
+    @Parameter(property = "excludeClassifiers")
     protected String excludeClassifiers;
 
     /**
      * Specify classifier to look for. Example: sources
      *
      */
-    @Parameter(property = "classifier", required = false)
+    @Parameter(property = "classifier")
     protected String copyDepClassifier;
 
     /**
@@ -273,66 +276,66 @@ public class NarMojo extends AbstractMojo {
      * Example: java-source,jar,war, nar
      *
      */
-    @Parameter(property = "type", required = false, defaultValue = "nar")
+    @Parameter(property = "type", defaultValue = "nar")
     protected String type;
 
     /**
      * Comma separated list of Artifact names too exclude.
      *
      */
-    @Parameter(property = "excludeArtifacts", required = false)
+    @Parameter(property = "excludeArtifacts")
     protected String excludeArtifactIds;
 
     /**
      * Comma separated list of Artifact names to include.
      *
      */
-    @Parameter(property = "includeArtifacts", required = false)
+    @Parameter(property = "includeArtifacts")
     protected String includeArtifactIds;
 
     /**
      * Comma separated list of GroupId Names to exclude.
      *
      */
-    @Parameter(property = "excludeArtifacts", required = false)
+    @Parameter(property = "excludeArtifacts")
     protected String excludeGroupIds;
 
     /**
      * Comma separated list of GroupIds to include.
      *
      */
-    @Parameter(property = "includeGroupIds", required = false)
+    @Parameter(property = "includeGroupIds")
     protected String includeGroupIds;
 
     /**
      * Directory to store flag files
      *
      */
-    @Parameter(property = "markersDirectory", required = false, defaultValue = "${project.build.directory}/dependency-maven-plugin-markers")
+    @Parameter(property = "markersDirectory", defaultValue = "${project.build.directory}/dependency-maven-plugin-markers")
     protected File markersDirectory;
 
     /**
      * Overwrite release artifacts
      *
      */
-    @Parameter(property = "overWriteReleases", required = false)
+    @Parameter(property = "overWriteReleases")
     protected boolean overWriteReleases;
 
     /**
      * Overwrite snapshot artifacts
      *
      */
-    @Parameter(property = "overWriteSnapshots", required = false)
+    @Parameter(property = "overWriteSnapshots")
     protected boolean overWriteSnapshots;
 
     /**
      * Overwrite artifacts that don't exist or are older than the source.
      *
      */
-    @Parameter(property = "overWriteIfNewer", required = false, defaultValue = "true")
+    @Parameter(property = "overWriteIfNewer", defaultValue = "true")
     protected boolean overWriteIfNewer;
 
-    @Parameter(property = "projectBuildDirectory", required = false, defaultValue = "${project.build.directory}")
+    @Parameter(property = "projectBuildDirectory", defaultValue = "${project.build.directory}")
     protected File projectBuildDirectory;
 
     /**
@@ -349,16 +352,6 @@ public class NarMojo extends AbstractMojo {
     protected ArtifactResolver resolver;
 
     /**
-     * Artifact collector, needed to resolve dependencies.
-     *
-     */
-    @Component(role = org.apache.maven.artifact.resolver.ArtifactCollector.class)
-    protected ArtifactCollector artifactCollector;
-
-    @Component(role = org.apache.maven.artifact.metadata.ArtifactMetadataSource.class)
-    protected ArtifactMetadataSource artifactMetadataSource;
-
-    /**
      * Location of the local repository.
      *
      */
@@ -370,7 +363,7 @@ public class NarMojo extends AbstractMojo {
      *
      */
     @Parameter(property = "project.remoteArtifactRepositories", required = true, readonly = true)
-    protected List remoteRepos;
+    protected List<ArtifactRepository> remoteRepos;
 
     /**
      * To look up Archiver/UnArchiver implementations
@@ -390,7 +383,7 @@ public class NarMojo extends AbstractMojo {
      * If the plugin should be silent.
      *
      */
-    @Parameter(property = "silent", required = false, defaultValue = "false")
+    @Parameter(property = "silent", defaultValue = "false")
     public boolean silent;
 
     /**
@@ -411,7 +404,7 @@ public class NarMojo extends AbstractMojo {
      * Output absolute filename for resolved artifacts
      *
      */
-    @Parameter(property = "outputAbsoluteArtifactFilename", defaultValue = "false", required = false)
+    @Parameter(property = "outputAbsoluteArtifactFilename", defaultValue = "false")
     protected boolean outputAbsoluteArtifactFilename;
 
     /* The values to use for populating the Nar-Group, Nar-Id, and Nar-Version in the MANIFEST file. By default
@@ -446,13 +439,13 @@ public class NarMojo extends AbstractMojo {
     @Parameter(property = "narVersion", defaultValue = "${project.version}", required = true)
     protected String narVersion;
 
-    @Parameter(property = "narDependencyGroup", required = false)
+    @Parameter(property = "narDependencyGroup")
     protected String narDependencyGroup = null;
 
-    @Parameter(property = "narDependencyId", required = false)
+    @Parameter(property = "narDependencyId")
     protected String narDependencyId = null;
 
-    @Parameter(property = "narDependencyVersion", required = false)
+    @Parameter(property = "narDependencyVersion")
     protected String narDependencyVersion = null;
 
 
@@ -460,24 +453,24 @@ public class NarMojo extends AbstractMojo {
      * Build info to be populated in MANIFEST.
      */
 
-    @Parameter(property = "buildTag", defaultValue = "${project.scm.tag}", required = false)
+    @Parameter(property = "buildTag", defaultValue = "${project.scm.tag}")
     protected String buildTag;
 
-    @Parameter(property = "buildBranch", defaultValue = "${buildBranch}", required = false)
+    @Parameter(property = "buildBranch", defaultValue = "${buildBranch}")
     protected String buildBranch;
 
-    @Parameter(property = "buildRevision", defaultValue = "${buildRevision}", required = false)
+    @Parameter(property = "buildRevision", defaultValue = "${buildRevision}")
     protected String buildRevision;
 
     /**
      * Allows a NAR to specify if it's resources should be cloned when a component that depends on this NAR
      * is performing class loader isolation.
      */
-    @Parameter(property = "cloneDuringInstanceClassLoading", defaultValue = "false", required = false)
+    @Parameter(property = "cloneDuringInstanceClassLoading", defaultValue = "false")
     protected boolean cloneDuringInstanceClassLoading;
 
 
-    @Parameter(property = "enforceDocGeneration", defaultValue = "false", required = false)
+    @Parameter(property = "enforceDocGeneration", defaultValue = "false")
     protected boolean enforceDocGeneration;
 
     /**
@@ -650,11 +643,7 @@ public class NarMojo extends AbstractMojo {
                                     final Class<?> docWriterClass, final XMLStreamWriter xmlWriter, final File additionalDetailsDir)
         throws InvocationTargetException, NoSuchMethodException, ClassNotFoundException, InstantiationException, IllegalAccessException, IOException {
 
-        final Set<ExtensionDefinition> sorted = new TreeSet<>(new Comparator<ExtensionDefinition>() {
-            public int compare(ExtensionDefinition e1, ExtensionDefinition e2) {
-                return e1.getExtensionName().compareTo(e2.getExtensionName());
-            }
-        });
+        final Set<ExtensionDefinition> sorted = new TreeSet<>(Comparator.comparing(ExtensionDefinition::getExtensionName));
         sorted.addAll(extensionDefinitions);
 
         for (final ExtensionDefinition definition : sorted) {
@@ -675,14 +664,14 @@ public class NarMojo extends AbstractMojo {
 
     private void writeDocumentation(final ExtensionDefinition extensionDefinition, final ExtensionClassLoader classLoader,
                                     final Class<?> docWriterClass, final XMLStreamWriter xmlWriter)
-        throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException, ClassNotFoundException, IOException {
+        throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException, ClassNotFoundException {
 
         getLog().debug("Generating documentation for " + extensionDefinition.getExtensionName() + " using ClassLoader:" + System.lineSeparator() + classLoader.toTree());
         final Object docWriter = docWriterClass.getConstructor(XMLStreamWriter.class).newInstance(xmlWriter);
         final Class<?> configurableComponentClass = Class.forName("org.apache.nifi.components.ConfigurableComponent", false, classLoader);
 
         final Class<?> extensionClass = Class.forName(extensionDefinition.getExtensionName(), false, classLoader);
-        final Object extensionInstance = extensionClass.newInstance();
+        final Object extensionInstance = extensionClass.getDeclaredConstructor().newInstance();
 
         final Method initMethod = docWriterClass.getMethod("initialize", configurableComponentClass);
         initMethod.invoke(docWriter, extensionInstance);
@@ -875,7 +864,7 @@ public class NarMojo extends AbstractMojo {
 
 
     private void copyDependencies() throws MojoExecutionException {
-        DependencyStatusSets dss = getDependencySets(this.failOnMissingClassifierArtifact);
+        DependencyStatusSets dss = getDependencySets();
         Set<Artifact> artifacts = dss.getResolvedDependencies();
 
         for (Artifact artifact : artifacts) {
@@ -890,7 +879,15 @@ public class NarMojo extends AbstractMojo {
 
     protected void copyArtifact(Artifact artifact) throws MojoExecutionException {
         String destFileName = DependencyUtil.getFormattedFileName(artifact, false);
-        final File destDir = DependencyUtil.getFormattedOutputDirectory(false, false, false, false, false, getDependenciesDirectory(), artifact);
+        final File destDir = DependencyUtil.getFormattedOutputDirectory(
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                getDependenciesDirectory(),
+                artifact);
         final File destFile = new File(destDir, destFileName);
         copyFile(artifact.getFile(), destFile);
     }
@@ -898,20 +895,34 @@ public class NarMojo extends AbstractMojo {
     protected Artifact getResolvedPomArtifact(Artifact artifact) {
         Artifact pomArtifact = this.factory.createArtifact(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion(), "", "pom");
         // Resolve the pom artifact using repos
-        try {
-            this.resolver.resolve(pomArtifact, this.remoteRepos, this.local);
-        } catch (ArtifactResolutionException | ArtifactNotFoundException e) {
-            getLog().info(e.getMessage());
+        ArtifactResolutionRequest artifactResolutionRequest = getArtifactResolutionRequest(pomArtifact);
+        ArtifactResolutionResult artifactResolutionResult = this.resolver.resolve(artifactResolutionRequest);
+        if (artifactResolutionResult.hasExceptions()) {
+            getLog().info("Could not resolve [" + pomArtifact + "]");
+            for (Exception e : artifactResolutionResult.getExceptions()){
+                getLog().info(e.getMessage());
+            }
         }
         return pomArtifact;
     }
 
     protected ArtifactsFilter getMarkedArtifactFilter() {
-        return new DestFileFilter(this.overWriteReleases, this.overWriteSnapshots, this.overWriteIfNewer, false, false, false, false, false, getDependenciesDirectory());
+        return new DestFileFilter(
+                this.overWriteReleases,
+                this.overWriteSnapshots,
+                this.overWriteIfNewer,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                getDependenciesDirectory());
     }
 
 
-    protected DependencyStatusSets getDependencySets(boolean stopOnFailure) throws MojoExecutionException {
+    protected DependencyStatusSets getDependencySets() throws MojoExecutionException {
         // add filters in well known order, least specific to most specific
         FilterArtifacts filter = new FilterArtifacts();
 
@@ -926,7 +937,7 @@ public class NarMojo extends AbstractMojo {
         filter.addFilter(new TypeFilter("", "nar"));
 
         // start with all artifacts.
-        Set artifacts = project.getArtifacts();
+        Set<Artifact> artifacts = project.getArtifacts();
 
         // perform filtering
         try {
@@ -938,7 +949,7 @@ public class NarMojo extends AbstractMojo {
         // transform artifacts if classifier is set
         final DependencyStatusSets status;
         if (StringUtils.isNotEmpty(copyDepClassifier)) {
-            status = getClassifierTranslatedDependencies(artifacts, stopOnFailure);
+            status = getClassifierTranslatedDependencies(artifacts);
         } else {
             status = filterMarkedDependencies(artifacts);
         }
@@ -946,31 +957,34 @@ public class NarMojo extends AbstractMojo {
         return status;
     }
 
-    protected DependencyStatusSets getClassifierTranslatedDependencies(Set artifacts, boolean stopOnFailure) throws MojoExecutionException {
-        Set unResolvedArtifacts = new HashSet();
-        Set resolvedArtifacts = artifacts;
+    protected DependencyStatusSets getClassifierTranslatedDependencies(Set<Artifact> artifacts) throws MojoExecutionException {
+        Set<Artifact> unResolvedArtifacts = new HashSet<>();
+        Set<Artifact> resolvedArtifacts = artifacts;
         DependencyStatusSets status = new DependencyStatusSets();
 
         // possibly translate artifacts into a new set of artifacts based on the
         // classifier and type
         // if this did something, we need to resolve the new artifacts
         if (StringUtils.isNotEmpty(copyDepClassifier)) {
-            ArtifactTranslator translator = new ClassifierTypeTranslator(this.copyDepClassifier, this.type, this.factory);
-            artifacts = translator.translate(artifacts, getLog());
+            ArtifactTranslator translator = new ClassifierTypeTranslator(artifactHandlerManager, copyDepClassifier, type);
+            Set<ArtifactCoordinate> artifactCoordinates = translator.translate(artifacts, getLog());
 
             status = filterMarkedDependencies(artifacts);
 
             // the unskipped artifacts are in the resolved set.
             artifacts = status.getResolvedDependencies();
+            unResolvedArtifacts.addAll(artifacts);
 
             // resolve the rest of the artifacts
-            ArtifactsResolver artifactsResolver = new DefaultArtifactsResolver(this.resolver, this.local,
-                    this.remoteRepos, stopOnFailure);
-            resolvedArtifacts = artifactsResolver.resolve(artifacts, getLog());
-
-            // calculate the artifacts not resolved.
-            unResolvedArtifacts.addAll(artifacts);
-            unResolvedArtifacts.removeAll(resolvedArtifacts);
+            ArtifactResolver artifactResolver = new DefaultArtifactResolver();
+            for (Artifact artifact : artifacts) {
+                ArtifactResolutionRequest req = getArtifactResolutionRequest(artifact);
+                ArtifactResolutionResult result = artifactResolver.resolve(req);
+                if (result.getArtifacts() != null)
+                {
+                    unResolvedArtifacts.removeAll(result.getArtifacts());
+                }
+            }
         }
 
         // return a bean of all 3 sets.
@@ -980,13 +994,13 @@ public class NarMojo extends AbstractMojo {
         return status;
     }
 
-    protected DependencyStatusSets filterMarkedDependencies(Set artifacts) throws MojoExecutionException {
+    protected DependencyStatusSets filterMarkedDependencies(Set<Artifact> artifacts) throws MojoExecutionException {
         // remove files that have markers already
         FilterArtifacts filter = new FilterArtifacts();
         filter.clearFilters();
         filter.addFilter(getMarkedArtifactFilter());
 
-        Set unMarkedArtifacts;
+        Set<Artifact> unMarkedArtifacts;
         try {
             unMarkedArtifacts = filter.filter(artifacts);
         } catch (ArtifactFilterException e) {
@@ -994,8 +1008,7 @@ public class NarMojo extends AbstractMojo {
         }
 
         // calculate the skipped artifacts
-        Set skippedArtifacts = new HashSet();
-        skippedArtifacts.addAll(artifacts);
+        Set<Artifact> skippedArtifacts = new HashSet<>(artifacts);
         skippedArtifacts.removeAll(unMarkedArtifacts);
 
         return new DependencyStatusSets(unMarkedArtifacts, null, skippedArtifacts);
@@ -1125,6 +1138,14 @@ public class NarMojo extends AbstractMojo {
         return DEFAULT_EXCLUDES;
     }
 
+    private ArtifactResolutionRequest getArtifactResolutionRequest(Artifact artifact) {
+        ArtifactResolutionRequest request = new ArtifactResolutionRequest();
+        request.setRemoteRepositories(this.remoteRepos);
+        request.setLocalRepository(this.local);
+        request.setArtifact(artifact);
+        return request;
+    }
+
     protected File getNarFile(File basedir, String finalName, String classifier) {
         if (classifier == null) {
             classifier = "";
@@ -1143,7 +1164,7 @@ public class NarMojo extends AbstractMojo {
         filter.addFilter(new TypeFilter("nar", ""));
 
         // start with all artifacts.
-        Set artifacts = project.getArtifacts();
+        Set<Artifact> artifacts = project.getArtifacts();
 
         // perform filtering
         try {
@@ -1157,7 +1178,7 @@ public class NarMojo extends AbstractMojo {
             throw new MojoExecutionException("Each NAR represents a ClassLoader. A NAR dependency allows that NAR's ClassLoader to be "
                     + "used as the parent of this NAR's ClassLoader. As a result, only a single NAR dependency is allowed.");
         } else if (artifacts.size() == 1) {
-            final Artifact artifact = (Artifact) artifacts.iterator().next();
+            final Artifact artifact = artifacts.iterator().next();
 
             narDependency = new NarDependency(artifact.getGroupId(), artifact.getArtifactId(), artifact.getBaseVersion());
         }
