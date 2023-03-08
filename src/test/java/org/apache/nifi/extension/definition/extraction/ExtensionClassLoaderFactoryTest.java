@@ -29,6 +29,8 @@ import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.ProjectBuilder;
 import org.apache.maven.shared.dependency.graph.DependencyGraphBuilder;
 import org.eclipse.aether.RepositorySystemSession;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -54,8 +56,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class ExtensionClassLoaderFactoryTest
-{
+class ExtensionClassLoaderFactoryTest {
 
     @Mock private Log log;
     @Mock private ArtifactResolver artifactResolver;
@@ -73,7 +74,7 @@ class ExtensionClassLoaderFactoryTest
     // Test Subject
     private ExtensionClassLoaderFactory factory;
 
-    @org.junit.jupiter.api.BeforeEach
+    @BeforeEach
     void setUp() {
         artifact1 = projectArtifact();
         artifact2 = localRepositoryDependencyArtifact();
@@ -96,7 +97,7 @@ class ExtensionClassLoaderFactoryTest
                 .build();
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     void createClassLoaderTest() throws Exception {
         Set<Artifact> dependencyArtifacts = new TreeSet<>();
         dependencyArtifacts.add(localRepositoryDependencyArtifact());
