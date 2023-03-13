@@ -26,9 +26,6 @@ import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
 import org.apache.maven.artifact.installer.ArtifactInstaller;
 import org.apache.maven.artifact.repository.ArtifactRepository;
 import org.apache.maven.artifact.repository.ArtifactRepositoryFactory;
-import org.apache.maven.artifact.repository.RepositoryRequest;
-import org.apache.maven.artifact.resolver.ArtifactNotFoundException;
-import org.apache.maven.artifact.resolver.ArtifactResolutionException;
 import org.apache.maven.artifact.resolver.ArtifactResolutionRequest;
 import org.apache.maven.artifact.resolver.ArtifactResolutionResult;
 import org.apache.maven.artifact.resolver.ArtifactResolver;
@@ -36,17 +33,16 @@ import org.apache.maven.artifact.resolver.DefaultArtifactResolver;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugins.dependency.utils.DependencyStatusSets;
-import org.apache.maven.plugins.dependency.utils.DependencyUtil;
-import org.apache.maven.plugins.dependency.utils.filters.DestFileFilter;
-import org.apache.maven.plugins.dependency.utils.translators.ArtifactTranslator;
-import org.apache.maven.plugins.dependency.utils.translators.ClassifierTypeTranslator;
-
 import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
+import org.apache.maven.plugins.dependency.utils.DependencyStatusSets;
+import org.apache.maven.plugins.dependency.utils.DependencyUtil;
+import org.apache.maven.plugins.dependency.utils.filters.DestFileFilter;
+import org.apache.maven.plugins.dependency.utils.translators.ArtifactTranslator;
+import org.apache.maven.plugins.dependency.utils.translators.ClassifierTypeTranslator;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.MavenProjectHelper;
 import org.apache.maven.project.ProjectBuilder;
@@ -980,8 +976,7 @@ public class NarMojo extends AbstractMojo {
             for (Artifact artifact : artifacts) {
                 ArtifactResolutionRequest req = getArtifactResolutionRequest(artifact);
                 ArtifactResolutionResult result = artifactResolver.resolve(req);
-                if (result.getArtifacts() != null)
-                {
+                if (result.getArtifacts() != null) {
                     unResolvedArtifacts.removeAll(result.getArtifacts());
                 }
             }
