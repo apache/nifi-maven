@@ -124,7 +124,7 @@ class ExtensionClassLoaderFactoryTest {
         }
         verifyNoMoreInteractions(artifactResolver);
     }
-    
+
     private List<ArtifactResolutionRequest> getExpectedArtifactResolutionRequests() {
         ArtifactResolutionRequest request1 = new ArtifactResolutionRequest();
         request1.setArtifact(artifact2);
