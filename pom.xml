@@ -18,7 +18,7 @@
     <parent>
         <groupId>org.apache</groupId>
         <artifactId>apache</artifactId>
-        <version>25</version>
+        <version>29</version>
         <relativePath />
     </parent>
     <groupId>org.apache.nifi</groupId>
@@ -60,9 +60,6 @@
             <archive>http://mail-archives.apache.org/mod_mbox/nifi-commits</archive>
         </mailingList>
     </mailingLists>
-    <prerequisites>
-        <maven>${maven.min-version}</maven>
-    </prerequisites>
     <scm>
         <connection>scm:git:git://git.apache.org/nifi-maven.git</connection>
         <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/nifi-maven.git</developerConnection>
@@ -74,75 +71,32 @@
         <url>https://issues.apache.org/jira/browse/NIFI</url>
     </issueManagement>
     <properties>
+        <!-- Set minimum Java version for maven-enforcer-plugin from parent POM -->
+        <minimalJavaBuildVersion>1.8.0-251</minimalJavaBuildVersion>
+        <!-- Set minimum Maven version for maven-enforcer-plugin from parent POM -->
+        <minimalMavenBuildVersion>3.6.3</minimalMavenBuildVersion>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
-        <maven.min-version>3.6.3</maven.min-version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <project.build.outputTimestamp>2023-03-08T15:05:37Z</project.build.outputTimestamp>
         <inceptionYear>2014</inceptionYear>
+        <mockito.version>4.11.0</mockito.version>
+        <junit.version>5.9.2</junit.version>
+        <slf4j.version>2.0.6</slf4j.version>
     </properties>
     <build>
         <pluginManagement>
             <plugins>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-compiler-plugin</artifactId>
-                    <version>3.2</version>
-                    <configuration>
-                        <fork>true</fork>
-                        <optimize>true</optimize>
-                        <showDeprecation>true</showDeprecation>
-                        <showWarnings>true</showWarnings>
-                    </configuration>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-dependency-plugin</artifactId>
-                    <version>2.9</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-resources-plugin</artifactId>
-                    <version>2.7</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.0.0-M8</version>
-                    <configuration>
-                        <redirectTestOutputToFile>true</redirectTestOutputToFile>
-                        <argLine>-Xmx1G</argLine>
-                    </configuration>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-source-plugin</artifactId>
-                    <version>3.2.1</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-jar-plugin</artifactId>
-                    <version>3.2.2</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-javadoc-plugin</artifactId>
-                    <version>2.10.1</version>
-                    <configuration>
-                        <failOnError>false</failOnError>
-                        <quiet>true</quiet>
-                        <show>private</show>
-                        <encoding>UTF-8</encoding>
-                        <quiet>true</quiet>
-                        <javadocVersion>1.7</javadocVersion>
-                        <additionalJOption>-J-Xmx512m</additionalJOption>
-                    </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-release-plugin</artifactId>
-                    <version>3.0.0-M5</version>
+                    <version>3.0.0-M7</version>
                     <configuration>
                         <useReleaseProfile>false</useReleaseProfile>
                         <releaseProfiles>apache-release</releaseProfiles>
@@ -167,7 +121,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-checkstyle-plugin</artifactId>
-                    <version>3.2.0</version>
+                    <version>3.2.1</version>
                     <dependencies>
                         <dependency>
                             <groupId>com.puppycrawl.tools</groupId>
@@ -191,39 +145,20 @@
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-enforcer-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>enforce-maven</id>
-                        <goals>
-                            <goal>enforce</goal>
-                        </goals>
-                        <configuration>
-                            <rules>
-                                <requireSameVersions>
-                                    <plugins>
-                                        <plugin>org.apache.maven.plugins:maven-surefire-plugin</plugin>
-                                        <plugin>org.apache.maven.plugins:maven-failsafe-plugin</plugin>
-                                        <plugin>org.apache.maven.plugins:maven-surefire-report-plugin</plugin>
-                                    </plugins>
-                                </requireSameVersions>
-                                <requireMavenVersion>
-                                    <version>${maven.min-version}</version>
-                                </requireMavenVersion>
-                            </rules>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-checkstyle-plugin</artifactId>
                 <configuration>
                     <configLocation>checkstyle.xml</configLocation>
-                    <violationSeverity>warning</violationSeverity>
                     <includeTestSourceDirectory>true</includeTestSourceDirectory>
                     <excludes>**/HelpMojo.java</excludes>
                 </configuration>
+                <executions>
+                    <execution>
+                        <id>check</id>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.rat</groupId>
@@ -235,20 +170,14 @@
                         <exclude>DEPENDENCIES</exclude> <!-- auto generated file by apache's maven config while building sources.zip -->
                     </excludes>
                 </configuration>
-                <dependencies>
-                    <!-- workaround for RAT-158 -->
-                    <dependency>
-                        <groupId>org.apache.maven.doxia</groupId>
-                        <artifactId>doxia-core</artifactId>
-                        <version>1.6</version>
-                        <exclusions>
-                            <exclusion>
-                                <groupId>xerces</groupId>
-                                <artifactId>xercesImpl</artifactId>
-                            </exclusion>
-                        </exclusions>
-                    </dependency>
-                </dependencies>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <phase>verify</phase>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -328,8 +257,6 @@
             <version>3.2.1</version>
         </dependency>
         <dependency>
-            <!-- No code from maven-jar-plugin is actually used; it's included
-            just to simplify the dependencies list.                     -->
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-jar-plugin</artifactId>
             <version>3.3.0</version>
@@ -344,61 +271,32 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>5.9.2</version>
+            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
-            <version>3.12.4</version>
+            <version>${mockito.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-junit-jupiter</artifactId>
-            <version>3.12.4</version>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-nop</artifactId>
+            <version>${slf4j.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
-    <profiles>
-        <profile>
-            <!--
-            Checks style and licensing requirements.  This is a good idea to
-            run for contributions and for the release process.  While it
-            would be nice to run always these plugins can considerably slow
-            the build and have proven to create unstable builds in our
-            multi-module project and when building using multiple threads.
-            The stability issues seen with Checkstyle in multi-module builds
-            include false-positives and false negatives.-->
-            <id>contrib-check</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.rat</groupId>
-                        <artifactId>apache-rat-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <goals>
-                                    <goal>check</goal>
-                                </goals>
-                                <phase>verify</phase>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-checkstyle-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <id>check-style</id>
-                                <goals>
-                                    <goal>check</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>
