@@ -19,6 +19,7 @@ on:
   push:
     branches:
       - main
+      - NIFI-11283
   pull_request:
     branches:
       - main
