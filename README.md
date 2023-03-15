@@ -14,6 +14,8 @@
 -->
 # Apache NiFi NAR Maven Plugin
 
+[![build](https://github.com/apache/nifi-maven/actions/workflows/build.yml/badge.svg)](https://github.com/apache/nifi-maven/actions/workflows/build.yml)
+
 Apache NiFi NAR Maven Plugin helps to build NiFi Archive bundles to support the classloader isolation model of NiFi.
 
 ## Table of Contents
@@ -23,9 +25,10 @@ Apache NiFi NAR Maven Plugin helps to build NiFi Archive bundles to support the 
 - [Getting Help](#getting-help)
 - [License](#license)
 
-## Requirements
-* JDK 1.8 or higher
-* Apache Maven 3.1.0 or higher
+## Minimum Requirements
+
+* JDK 1.8.0-251
+* Apache Maven 3.6.3
 
 ## Getting Started
 
