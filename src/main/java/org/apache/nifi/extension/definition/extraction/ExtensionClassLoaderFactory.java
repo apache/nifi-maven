@@ -145,10 +145,7 @@ public class ExtensionClassLoaderFactory {
     }
 
     private Set<Artifact> getNarDependencies(final Artifact narArtifact) throws MojoExecutionException, ProjectBuildingException {
-        final ProjectBuildingRequest narRequest = new DefaultProjectBuildingRequest();
-        narRequest.setRepositorySession(repoSession);
-        narRequest.setSystemProperties(System.getProperties());
-        narRequest.setLocalRepository(localRepo);
+        final ProjectBuildingRequest narRequest = createProjectBuildingRequest();
 
         final ProjectBuildingResult narResult = projectBuilder.build(narArtifact, narRequest);
 
@@ -173,10 +170,7 @@ public class ExtensionClassLoaderFactory {
     }
 
     private String findProvidedDependencyVersion(final Set<Artifact> artifacts, final String groupId, final String artifactId) {
-        final ProjectBuildingRequest projectRequest = new DefaultProjectBuildingRequest();
-        projectRequest.setRepositorySession(repoSession);
-        projectRequest.setSystemProperties(System.getProperties());
-        projectRequest.setLocalRepository(localRepo);
+        final ProjectBuildingRequest projectRequest = createProjectBuildingRequest();
 
         for (final Artifact artifact : artifacts) {
             try {
@@ -304,10 +298,7 @@ public class ExtensionClassLoaderFactory {
         };
 
         try {
-            final ProjectBuildingRequest projectRequest = new DefaultProjectBuildingRequest();
-            projectRequest.setRepositorySession(repoSession);
-            projectRequest.setSystemProperties(System.getProperties());
-            projectRequest.setLocalRepository(localRepo);
+            final ProjectBuildingRequest projectRequest = createProjectBuildingRequest();
             projectRequest.setProject(mavenProject);
 
             final ArtifactFilter excludesFilter = new ExclusionSetFilter(EXCLUDED_ARTIFACT_IDS);
@@ -317,6 +308,16 @@ public class ExtensionClassLoaderFactory {
             throw new MojoExecutionException("Failed to build dependency tree", e);
         }
         return artifacts;
+    }
+
+    private ProjectBuildingRequest createProjectBuildingRequest() {
+        final ProjectBuildingRequest projectRequest = new DefaultProjectBuildingRequest();
+        projectRequest.setRepositorySession(repoSession);
+        projectRequest.setSystemProperties(System.getProperties());
+        projectRequest.setUserProperties(System.getProperties());
+        projectRequest.setLocalRepository(localRepo);
+        projectRequest.setRemoteRepositories(remoteRepos);
+        return projectRequest;
     }
 
     private Set<URL> toURLs(final Artifact artifact) throws MojoExecutionException {
