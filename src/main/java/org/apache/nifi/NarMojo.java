@@ -469,6 +469,9 @@ public class NarMojo extends AbstractMojo {
     @Parameter(property = "enforceDocGeneration", defaultValue = "false")
     protected boolean enforceDocGeneration;
 
+    @Parameter(property = "skipDocGeneration", defaultValue = "false")
+    protected boolean skipDocGeneration;
+
     /**
      * The {@link RepositorySystemSession} used for obtaining the local and remote artifact repositories.
      */
@@ -497,15 +500,19 @@ public class NarMojo extends AbstractMojo {
     public void execute() throws MojoExecutionException {
         copyDependencies();
 
-        try {
-            generateDocumentation();
-        } catch (final Throwable t) { // Catch Throwable in case a linkage error such as NoClassDefFoundError occurs
-            if (enforceDocGeneration) {
-                getLog().error("Could not generate extensions' documentation", t);
-                throw t;
-            } else {
-                getLog().warn("Could not generate extensions' documentation", t);
+        if (!skipDocGeneration) {
+            try {
+                generateDocumentation();
+            } catch (final Throwable t) { // Catch Throwable in case a linkage error such as NoClassDefFoundError occurs
+                if (enforceDocGeneration) {
+                    getLog().error("Could not generate extensions' documentation", t);
+                    throw t;
+                } else {
+                    getLog().warn("Could not generate extensions' documentation", t);
+                }
             }
+        } else {
+            getLog().info("Skipping documentation generation for NiFi extensions");
         }
 
         makeNar();
@@ -1062,7 +1069,7 @@ public class NarMojo extends AbstractMojo {
                 getLog().warn("NAR will not contain any Extensions' documentation - no META-INF/" + extensionDocsFile.getName() + " file found!");
             }
 
-            File additionalDetailsDirectory = new File(getExtensionsDocumentationFile().getParentFile(), "additional-details");
+            File additionalDetailsDirectory = new File(extensionDocsFile.getParentFile(), "additional-details");
             if (additionalDetailsDirectory.exists()) {
                 archiver.getArchiver().addDirectory(additionalDetailsDirectory, "META-INF/docs/additional-details/");
             }
