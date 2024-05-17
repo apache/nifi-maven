@@ -620,6 +620,12 @@ public class NarMojo extends AbstractMojo {
 
                     final Set<ExtensionDefinition> reportingTaskDefinitions = extensionDefinitionFactory.discoverExtensions(ExtensionType.REPORTING_TASK);
                     writeDocumentation(reportingTaskDefinitions, extensionClassLoader, docWriterClass, xmlWriter, additionalDetailsDir);
+
+                    final Set<ExtensionDefinition> parameterProviderDefinitions = extensionDefinitionFactory.discoverExtensions(ExtensionType.PARAMETER_PROVIDER);
+                    writeDocumentation(parameterProviderDefinitions, extensionClassLoader, docWriterClass, xmlWriter, additionalDetailsDir);
+
+                    final Set<ExtensionDefinition> flowAnalysisRuleDefinitions = extensionDefinitionFactory.discoverExtensions(ExtensionType.FLOW_ANALYSIS_RULE);
+                    writeDocumentation(flowAnalysisRuleDefinitions, extensionClassLoader, docWriterClass, xmlWriter, additionalDetailsDir);
                 } finally {
                     if (currentContextClassLoader != null) {
                         Thread.currentThread().setContextClassLoader(currentContextClassLoader);
