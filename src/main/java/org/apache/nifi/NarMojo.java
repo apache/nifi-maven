@@ -1041,16 +1041,22 @@ public class NarMojo extends AbstractMojo {
     }
 
     private void makeNar() throws MojoExecutionException {
-        File narFile = createArchive();
+        final NarResult narResult = createArchive();
+        final File narFile = narResult.getNarFile();
 
         if (classifier != null) {
             projectHelper.attachArtifact(project, "nar", classifier, narFile);
         } else {
             project.getArtifact().setFile(narFile);
         }
+
+        final File extensionDocsFile = narResult.getExtensionDocsFile();
+        if (extensionDocsFile != null && !skipDocGeneration) {
+            projectHelper.attachArtifact(project, "xml", "nar-extension-manifest", extensionDocsFile);
+        }
     }
 
-    public File createArchive() throws MojoExecutionException {
+    private NarResult createArchive() throws MojoExecutionException {
         final File outputDirectory = projectBuildDirectory;
         File narFile = getNarFile(outputDirectory, finalName, classifier);
         MavenArchiver archiver = new MavenArchiver();
@@ -1122,7 +1128,7 @@ public class NarMojo extends AbstractMojo {
             archive.addManifestEntry("Clone-During-Instance-Class-Loading", String.valueOf(cloneDuringInstanceClassLoading));
 
             archiver.createArchive(session, project, archive);
-            return narFile;
+            return new NarResult(narFile, extensionDocsFile);
         } catch (ArchiverException | MojoExecutionException | ManifestException | IOException | DependencyResolutionRequiredException e) {
             throw new MojoExecutionException("Error assembling NAR", e);
         }
@@ -1216,6 +1222,24 @@ public class NarMojo extends AbstractMojo {
 
         public String getVersion() {
             return version;
+        }
+    }
+
+    private static class NarResult {
+        private final File narFile;
+        private final File extensionDocsFile;
+
+        public NarResult(final File narFile, final File extensionDocsFile) {
+            this.narFile = narFile;
+            this.extensionDocsFile = extensionDocsFile;
+        }
+
+        public File getNarFile() {
+            return narFile;
+        }
+
+        public File getExtensionDocsFile() {
+            return extensionDocsFile;
         }
     }
 
