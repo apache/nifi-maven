@@ -15,29 +15,39 @@
 # limitations under the License.
 name: build
 
-on:
-  push:
-    branches:
-      - main
-      - NIFI-11283
-  pull_request:
-    branches:
-      - main
+on: [push, pull_request]
 
 permissions:
   contents: read
+
+env:
+  MAVEN_COMMAND: ./mvnw
+  MAVEN_COMPILE_COMMAND: >-
+    verify
+    --batch-mode
+    --update-snapshots
+    --show-version
+    --no-snapshot-updates
+    --no-transfer-progress
+    --fail-fast
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Setup Java JDK
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
-          java-version: '8'
+          java-version: '21'
           distribution: 'zulu'
           cache: 'maven'
       - name: Build
-        run: mvn --batch-mode --update-snapshots verify
+        run:  >
+          ${{ env.MAVEN_COMMAND }}
+          ${{ env.MAVEN_COMPILE_COMMAND }}

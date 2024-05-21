@@ -18,12 +18,12 @@
     <parent>
         <groupId>org.apache</groupId>
         <artifactId>apache</artifactId>
-        <version>29</version>
+        <version>32</version>
         <relativePath />
     </parent>
     <groupId>org.apache.nifi</groupId>
     <artifactId>nifi-nar-maven-plugin</artifactId>
-    <version>1.5.2-SNAPSHOT</version>
+    <version>2.0.0-SNAPSHOT</version>
     <packaging>maven-plugin</packaging>
     <description>Apache NiFi Nar Maven Plugin</description>
     <url>http://nifi.apache.org</url>
@@ -71,19 +71,15 @@
         <url>https://issues.apache.org/jira/browse/NIFI</url>
     </issueManagement>
     <properties>
-        <!-- Set minimum Java version for maven-enforcer-plugin from parent POM -->
-        <minimalJavaBuildVersion>1.8.0-251</minimalJavaBuildVersion>
-        <!-- Set minimum Maven version for maven-enforcer-plugin from parent POM -->
-        <minimalMavenBuildVersion>3.6.3</minimalMavenBuildVersion>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
+        <maven.compiler.release>21</maven.compiler.release>
+        <maven.compiler.showDeprecation>true</maven.compiler.showDeprecation>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <project.build.outputTimestamp>2023-06-14T20:31:06Z</project.build.outputTimestamp>
         <inceptionYear>2014</inceptionYear>
-        <mockito.version>4.11.0</mockito.version>
-        <junit.version>5.9.2</junit.version>
-        <slf4j.version>2.0.6</slf4j.version>
+        <mockito.version>5.12.0</mockito.version>
+        <junit.version>5.10.2</junit.version>
+        <slf4j.version>2.0.13</slf4j.version>
     </properties>
     <build>
         <pluginManagement>
@@ -91,12 +87,12 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.0.0-M8</version>
+                    <version>3.2.5</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-release-plugin</artifactId>
-                    <version>3.0.0-M7</version>
+                    <version>3.0.1</version>
                     <configuration>
                         <useReleaseProfile>false</useReleaseProfile>
                         <releaseProfiles>apache-release</releaseProfiles>
@@ -121,14 +117,24 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-checkstyle-plugin</artifactId>
-                    <version>3.2.1</version>
+                    <version>3.3.1</version>
                     <dependencies>
                         <dependency>
                             <groupId>com.puppycrawl.tools</groupId>
                             <artifactId>checkstyle</artifactId>
-                            <version>9.3</version>
+                            <version>10.16.0</version>
                         </dependency>
                     </dependencies>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <configuration>
+                        <fork>true</fork>
+                        <showDeprecation>${maven.compiler.showDeprecation}</showDeprecation>
+                        <showWarnings>true</showWarnings>
+                        <release>${maven.compiler.release}</release>
+                    </configuration>
                 </plugin>
             </plugins>
         </pluginManagement>
@@ -136,12 +142,47 @@
             <plugin>
                 <groupId>org.sonatype.plugins</groupId>
                 <artifactId>nexus-staging-maven-plugin</artifactId>
-                <version>1.6.5</version>
+                <version>1.6.13</version>
                 <extensions>true</extensions>
                 <configuration>
                     <serverId>repository.apache.org</serverId>
                     <nexusUrl>https://repository.apache.org/</nexusUrl>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>enforce-maven-version</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <banDuplicatePomDependencyVersions />
+                                <requireSameVersions>
+                                    <plugins>
+                                        <plugin>org.apache.maven.plugins:maven-surefire-plugin</plugin>
+                                        <plugin>org.apache.maven.plugins:maven-failsafe-plugin</plugin>
+                                        <plugin>org.apache.maven.plugins:maven-surefire-report-plugin</plugin>
+                                    </plugins>
+                                </requireSameVersions>
+                                <requireMavenVersion>
+                                    <version>3.9.6</version>
+                                </requireMavenVersion>
+                                <requireReleaseDeps>
+                                    <message>Dependencies outside of Apache NiFi must not use SNAPSHOT versions</message>
+                                    <failWhenParentIsSnapshot>false</failWhenParentIsSnapshot>
+                                    <excludes>
+                                        <exclude>org.apache.nifi:*</exclude>
+                                    </excludes>
+                                </requireReleaseDeps>
+                            </rules>
+                            <fail>true</fail>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -182,7 +223,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-plugin-plugin</artifactId>
-                <version>3.6.0</version>
+                <version>3.13.0</version>
                 <executions>
                     <execution>
                         <id>default-descriptor</id>
@@ -206,28 +247,30 @@
         <dependency>
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-archiver</artifactId>
-            <version>3.6.0</version>
+            <version>3.6.2</version>
         </dependency>
         <dependency>
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-plugin-api</artifactId>
-            <version>3.9.0</version>
+            <scope>provided</scope>
+            <version>3.9.6</version>
         </dependency>
         <dependency>
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-artifact</artifactId>
-            <version>3.9.0</version>
+            <version>3.9.6</version>
         </dependency>
         <dependency>
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-compat</artifactId>
-            <version>3.9.0</version>
+            <scope>provided</scope>
+            <version>3.9.6</version>
         </dependency>
         <dependency>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-dependency-plugin</artifactId>
             <type>maven-plugin</type>
-            <version>3.5.0</version>
+            <version>3.6.1</version>
             <exclusions>
             	<exclusion>
             		<groupId>org.apache.maven.doxia</groupId>
@@ -259,13 +302,13 @@
         <dependency>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-jar-plugin</artifactId>
-            <version>3.3.0</version>
+            <version>3.4.1</version>
         </dependency>
         <dependency>
             <groupId>org.apache.maven.plugin-tools</groupId>
             <artifactId>maven-plugin-annotations</artifactId>
             <scope>provided</scope>
-            <version>3.6.0</version>
+            <version>3.13.0</version>
         </dependency>
         <!-- Test Dependencies -->
         <dependency>
