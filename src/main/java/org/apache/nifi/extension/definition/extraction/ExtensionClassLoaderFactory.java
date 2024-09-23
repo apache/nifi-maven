@@ -239,23 +239,25 @@ public class ExtensionClassLoaderFactory {
     private ExtensionClassLoader createProvidedEntitiesClassLoader(final ArtifactsHolder artifactsHolder)
             throws MojoExecutionException, ProjectBuildingException {
 
+        final Set<Artifact> providedArtifacts = new HashSet<>();
+
         final String nifiApiVersion = determineProvidedEntityVersion(artifactsHolder.getAllArtifacts(), "org.apache.nifi", "nifi-api");
         if (nifiApiVersion == null) {
             throw new MojoExecutionException("Could not find any dependency, provided or otherwise, on [org.apache.nifi:nifi-api]");
         } else {
             getLog().info("Found a dependency on version " + nifiApiVersion + " of NiFi API");
         }
+        final Artifact nifiApiArtifact = getProvidedArtifact("org.apache.nifi", "nifi-api", nifiApiVersion);
+        providedArtifacts.add(nifiApiArtifact);
+
+        final String nifiFrameworkApiVersion = determineProvidedEntityVersion(artifactsHolder.getAllArtifacts(),"org.apache.nifi", "nifi-framework-api");
+        if (nifiFrameworkApiVersion != null) {
+            final Artifact nifiFrameworkApiArtifact = getProvidedArtifact("org.apache.nifi", "nifi-framework-api", nifiFrameworkApiVersion);
+            providedArtifacts.add(nifiFrameworkApiArtifact);
+        }
 
         final String slf4jApiVersion = determineProvidedEntityVersion(artifactsHolder.getAllArtifacts(),"org.slf4j", "slf4j-api");
-
-        final Artifact nifiApiArtifact = getProvidedArtifact("org.apache.nifi", "nifi-api", nifiApiVersion);
-        final Artifact nifiFrameworkApiArtifact = getProvidedArtifact("org.apache.nifi", "nifi-framework-api", nifiApiArtifact.getVersion());
-
         final Artifact slf4jArtifact = getProvidedArtifact("org.slf4j", "slf4j-api", slf4jApiVersion);
-
-        final Set<Artifact> providedArtifacts = new HashSet<>();
-        providedArtifacts.add(nifiApiArtifact);
-        providedArtifacts.add(nifiFrameworkApiArtifact);
         providedArtifacts.add(slf4jArtifact);
 
         getLog().debug("Creating Provided Entities Class Loader with artifacts: " + providedArtifacts);
