@@ -16,6 +16,7 @@
  */
 package org.apache.nifi;
 
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.maven.archiver.MavenArchiveConfiguration;
 import org.apache.maven.archiver.MavenArchiver;
 import org.apache.maven.artifact.Artifact;
@@ -71,11 +72,22 @@ import org.codehaus.plexus.archiver.manager.ArchiverManager;
 import org.codehaus.plexus.util.FileUtils;
 import org.codehaus.plexus.util.StringUtils;
 import org.eclipse.aether.RepositorySystemSession;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
 
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -1053,6 +1065,29 @@ public class NarMojo extends AbstractMojo {
         final File extensionDocsFile = narResult.getExtensionDocsFile();
         if (extensionDocsFile != null && !skipDocGeneration) {
             projectHelper.attachArtifact(project, "xml", "nar-extension-manifest", extensionDocsFile);
+            addNarSha512(narFile, extensionDocsFile);
+        }
+    }
+
+    private void addNarSha512(final File narFile, final File extensionDocsFile) {
+        try {
+            final String narSha512 = DigestUtils.sha512Hex(new FileInputStream(narFile));
+
+            DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
+            DocumentBuilder documentBuilder = documentBuilderFactory.newDocumentBuilder();
+            Document document = documentBuilder.parse(extensionDocsFile);
+            Element root = document.getDocumentElement();
+            Element sha512Element = document.createElement("sha512");
+            sha512Element.appendChild(document.createTextNode(narSha512));
+            root.appendChild(sha512Element);
+
+            DOMSource source = new DOMSource(document);
+            TransformerFactory transformerFactory = TransformerFactory.newInstance();
+            Transformer transformer = transformerFactory.newTransformer();
+            StreamResult result = new StreamResult(extensionDocsFile);
+            transformer.transform(source, result);
+        } catch (Throwable t) {
+            throw new RuntimeException(t);
         }
     }
 
