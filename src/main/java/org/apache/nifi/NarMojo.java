@@ -976,7 +976,7 @@ public class NarMojo extends AbstractMojo {
         // if this did something, we need to resolve the new artifacts
         if (StringUtils.isNotEmpty(copyDepClassifier)) {
             ArtifactTranslator translator = new ClassifierTypeTranslator(artifactHandlerManager, copyDepClassifier, type);
-            Set<ArtifactCoordinate> artifactCoordinates = translator.translate(artifacts, getLog());
+            Set<org.eclipse.aether.artifact.Artifact> artifactCoordinates = translator.translate(artifacts, getLog());
 
             status = filterMarkedDependencies(artifacts);
 
