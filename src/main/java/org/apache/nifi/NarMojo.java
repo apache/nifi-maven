@@ -626,6 +626,9 @@ public class NarMojo extends AbstractMojo {
 
                     final Set<ExtensionDefinition> flowAnalysisRuleDefinitions = extensionDefinitionFactory.discoverExtensions(ExtensionType.FLOW_ANALYSIS_RULE);
                     writeDocumentation(flowAnalysisRuleDefinitions, extensionClassLoader, docWriterClass, xmlWriter, additionalDetailsDir);
+
+                    final Set<ExtensionDefinition> flowRegistryClientDefinitions = extensionDefinitionFactory.discoverExtensions(ExtensionType.FLOW_REGISTRY_CLIENT);
+                    writeDocumentation(flowRegistryClientDefinitions, extensionClassLoader, docWriterClass, xmlWriter, additionalDetailsDir);
                 } finally {
                     if (currentContextClassLoader != null) {
                         Thread.currentThread().setContextClassLoader(currentContextClassLoader);

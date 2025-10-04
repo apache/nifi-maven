@@ -44,6 +44,7 @@ public class ExtensionDefinitionFactory {
         INTERFACE_NAMES.put(ExtensionType.REPORTING_TASK, "org.apache.nifi.reporting.ReportingTask");
         INTERFACE_NAMES.put(ExtensionType.FLOW_ANALYSIS_RULE, "org.apache.nifi.flowanalysis.FlowAnalysisRule");
         INTERFACE_NAMES.put(ExtensionType.PARAMETER_PROVIDER, "org.apache.nifi.parameter.ParameterProvider");
+        INTERFACE_NAMES.put(ExtensionType.FLOW_REGISTRY_CLIENT, "org.apache.nifi.registry.flow.FlowRegistryClient");
     }
 
     private final ClassLoader extensionClassLoader;
