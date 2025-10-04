@@ -2,6 +2,7 @@ target
 .project
 .settings
 .classpath
+.checkstyle
 nbactions.xml
 nb-configuration.xml
 .DS_Store

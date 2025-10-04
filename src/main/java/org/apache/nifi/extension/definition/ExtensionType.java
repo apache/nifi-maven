@@ -26,6 +26,8 @@ public enum ExtensionType {
 
     FLOW_ANALYSIS_RULE,
 
-    PARAMETER_PROVIDER;
+    PARAMETER_PROVIDER,
+
+    FLOW_REGISTRY_CLIENT;
 
 }
