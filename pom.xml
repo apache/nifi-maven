@@ -18,7 +18,7 @@
     <parent>
         <groupId>org.apache</groupId>
         <artifactId>apache</artifactId>
-        <version>33</version>
+        <version>35</version>
         <relativePath />
     </parent>
     <groupId>org.apache.nifi</groupId>
@@ -77,9 +77,9 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <project.build.outputTimestamp>2024-09-25T19:25:52Z</project.build.outputTimestamp>
         <inceptionYear>2014</inceptionYear>
-        <mockito.version>5.14.2</mockito.version>
-        <junit.version>5.11.3</junit.version>
-        <slf4j.version>2.0.16</slf4j.version>
+        <mockito.version>5.20.0</mockito.version>
+        <junit.version>6.0.0</junit.version>
+        <slf4j.version>2.0.17</slf4j.version>
     </properties>
     <build>
         <pluginManagement>
@@ -87,12 +87,12 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.2.5</version>
+                    <version>3.5.4</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-release-plugin</artifactId>
-                    <version>3.0.1</version>
+                    <version>3.1.1</version>
                     <configuration>
                         <useReleaseProfile>false</useReleaseProfile>
                         <releaseProfiles>apache-release</releaseProfiles>
@@ -117,12 +117,12 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-checkstyle-plugin</artifactId>
-                    <version>3.3.1</version>
+                    <version>3.6.0</version>
                     <dependencies>
                         <dependency>
                             <groupId>com.puppycrawl.tools</groupId>
                             <artifactId>checkstyle</artifactId>
-                            <version>10.16.0</version>
+                            <version>11.1.0</version>
                         </dependency>
                     </dependencies>
                 </plugin>
@@ -142,7 +142,7 @@
             <plugin>
                 <groupId>org.sonatype.plugins</groupId>
                 <artifactId>nexus-staging-maven-plugin</artifactId>
-                <version>1.6.13</version>
+                <version>1.7.0</version>
                 <extensions>true</extensions>
                 <configuration>
                     <serverId>repository.apache.org</serverId>
@@ -223,7 +223,6 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-plugin-plugin</artifactId>
-                <version>3.13.0</version>
                 <executions>
                     <execution>
                         <id>default-descriptor</id>
@@ -247,30 +246,30 @@
         <dependency>
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-archiver</artifactId>
-            <version>3.6.3</version>
+            <version>3.6.4</version>
         </dependency>
         <dependency>
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-plugin-api</artifactId>
             <scope>provided</scope>
-            <version>3.9.9</version>
+            <version>3.9.11</version>
         </dependency>
         <dependency>
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-artifact</artifactId>
-            <version>3.9.9</version>
+            <version>3.9.11</version>
         </dependency>
         <dependency>
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-compat</artifactId>
             <scope>provided</scope>
-            <version>3.9.9</version>
+            <version>3.9.11</version>
         </dependency>
         <dependency>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-dependency-plugin</artifactId>
             <type>maven-plugin</type>
-            <version>3.8.1</version>
+            <version>3.9.0</version>
             <exclusions>
             	<exclusion>
             		<groupId>org.apache.maven.doxia</groupId>
