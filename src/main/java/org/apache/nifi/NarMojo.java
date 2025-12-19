@@ -115,7 +115,9 @@ import java.util.stream.Collectors;
 @Mojo(name = "nar", defaultPhase = LifecyclePhase.PACKAGE, threadSafe = true, requiresDependencyResolution = ResolutionScope.RUNTIME)
 public class NarMojo extends AbstractMojo {
     private static final String CONTROLLER_SERVICE_CLASS_NAME = "org.apache.nifi.controller.ControllerService";
+    private static final String CONNECTOR_CLASS_NAME = "org.apache.nifi.components.connector.Connector";
     private static final String DOCUMENTATION_WRITER_CLASS_NAME = "org.apache.nifi.documentation.xml.XmlDocumentationWriter";
+    private static final String CONNECTOR_DOCUMENTATION_WRITER_CLASS_NAME = "org.apache.nifi.documentation.xml.XmlConnectorDocumentationWriter";
 
     private static final String[] DEFAULT_EXCLUDES = new String[]{"**/package.html"};
     private static final String[] DEFAULT_INCLUDES = new String[]{"**/**"};
@@ -553,6 +555,9 @@ public class NarMojo extends AbstractMojo {
         final File additionalDetailsDir = new File(docsFile.getParentFile(), "additional-details");
         createDirectory(additionalDetailsDir);
 
+        final File stepDocumentationDir = new File(docsFile.getParentFile(), "steps");
+        createDirectory(stepDocumentationDir);
+
         try (final OutputStream out = new FileOutputStream(docsFile)) {
 
             final XMLStreamWriter xmlWriter = XMLOutputFactory.newInstance().createXMLStreamWriter(out, "UTF-8");
@@ -629,6 +634,20 @@ public class NarMojo extends AbstractMojo {
 
                     final Set<ExtensionDefinition> flowRegistryClientDefinitions = extensionDefinitionFactory.discoverExtensions(ExtensionType.FLOW_REGISTRY_CLIENT);
                     writeDocumentation(flowRegistryClientDefinitions, extensionClassLoader, docWriterClass, xmlWriter, additionalDetailsDir);
+
+                    // Connectors use a separate documentation writer since they are not ConfigurableComponents
+                    final Set<ExtensionDefinition> connectorDefinitions = extensionDefinitionFactory.discoverExtensions(ExtensionType.CONNECTOR);
+                    if (!connectorDefinitions.isEmpty()) {
+                        Class<?> connectorDocWriterClass = null;
+                        try {
+                            connectorDocWriterClass = Class.forName(CONNECTOR_DOCUMENTATION_WRITER_CLASS_NAME, false, extensionClassLoader);
+                        } catch (ClassNotFoundException e) {
+                            getLog().warn("Cannot locate class " + CONNECTOR_DOCUMENTATION_WRITER_CLASS_NAME + ", so no documentation will be generated for Connectors in this NAR");
+                        }
+                        if (connectorDocWriterClass != null) {
+                            writeConnectorDocumentation(connectorDefinitions, extensionClassLoader, connectorDocWriterClass, xmlWriter, stepDocumentationDir);
+                        }
+                    }
                 } finally {
                     if (currentContextClassLoader != null) {
                         Thread.currentThread().setContextClassLoader(currentContextClassLoader);
@@ -703,6 +722,46 @@ public class NarMojo extends AbstractMojo {
             final Method writeMethod = docWriterClass.getMethod("write", configurableComponentClass, Collection.class, Map.class);
             writeMethod.invoke(docWriter, extensionInstance, providedServices, propertyServices);
         }
+    }
+
+    private void writeConnectorDocumentation(final Set<ExtensionDefinition> extensionDefinitions, final ExtensionClassLoader classLoader,
+                                             final Class<?> connectorDocWriterClass, final XMLStreamWriter xmlWriter, final File stepDocumentationDir)
+        throws InvocationTargetException, NoSuchMethodException, ClassNotFoundException, InstantiationException, IllegalAccessException, IOException {
+
+        final Set<ExtensionDefinition> sorted = new TreeSet<>(Comparator.comparing(ExtensionDefinition::getExtensionName));
+        sorted.addAll(extensionDefinitions);
+
+        for (final ExtensionDefinition definition : sorted) {
+            writeConnectorDocumentation(definition, classLoader, connectorDocWriterClass, xmlWriter);
+        }
+
+        final Set<String> connectorNames = sorted.stream()
+            .map(ExtensionDefinition::getExtensionName)
+            .collect(Collectors.toSet());
+
+        try {
+            writeStepDocumentation(classLoader, connectorNames, stepDocumentationDir);
+        } catch (final Exception e) {
+            throw new IOException("Unable to extract Step Documentation", e);
+        }
+    }
+
+    private void writeConnectorDocumentation(final ExtensionDefinition extensionDefinition, final ExtensionClassLoader classLoader,
+                                             final Class<?> connectorDocWriterClass, final XMLStreamWriter xmlWriter)
+        throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException, ClassNotFoundException {
+
+        getLog().debug("Generating Connector documentation for " + extensionDefinition.getExtensionName() + " using ClassLoader:" + System.lineSeparator() + classLoader.toTree());
+        final Object connectorDocWriter = connectorDocWriterClass.getConstructor(XMLStreamWriter.class).newInstance(xmlWriter);
+        final Class<?> connectorClass = Class.forName(CONNECTOR_CLASS_NAME, false, classLoader);
+
+        final Class<?> extensionClass = Class.forName(extensionDefinition.getExtensionName(), false, classLoader);
+        final Object connectorInstance = extensionClass.getDeclaredConstructor().newInstance();
+
+        final Method initMethod = connectorDocWriterClass.getMethod("initialize", connectorClass);
+        initMethod.invoke(connectorDocWriter, connectorInstance);
+
+        final Method writeMethod = connectorDocWriterClass.getMethod("write", connectorClass);
+        writeMethod.invoke(connectorDocWriter, connectorInstance);
     }
 
     private List<Object> getDocumentationServiceAPIs(Class<?> serviceApiClass, Set<ServiceAPIDefinition> serviceDefinitions)
@@ -848,6 +907,70 @@ public class NarMojo extends AbstractMojo {
         }
     }
 
+    private void writeStepDocumentation(final ExtensionClassLoader classLoader, final Set<String> connectorNames, final File stepDocumentationDir)
+        throws URISyntaxException, IOException, MojoExecutionException {
+
+        for (final URL url : classLoader.getURLs()) {
+            final File file = new File(url.toURI());
+            final String filename = file.getName();
+            if (!filename.endsWith(".jar")) {
+                continue;
+            }
+
+            writeStepDocumentation(file, connectorNames, stepDocumentationDir);
+        }
+    }
+
+    private void writeStepDocumentation(final File file, final Set<String> connectorNames, final File stepDocumentationDir) throws IOException, MojoExecutionException {
+        final JarFile jarFile = new JarFile(file);
+
+        for (final Enumeration<JarEntry> jarEnumeration = jarFile.entries(); jarEnumeration.hasMoreElements();) {
+            final JarEntry jarEntry = jarEnumeration.nextElement();
+
+            final String entryName = jarEntry.getName();
+            // Look for step documentation under docs/<ConnectorClassName>/steps/
+            if (!entryName.startsWith("docs/")) {
+                continue;
+            }
+
+            final int nextSlashIndex = entryName.indexOf("/", 5);
+            if (nextSlashIndex < 0) {
+                continue;
+            }
+
+            final String connectorName = entryName.substring(5, nextSlashIndex);
+            if (!connectorNames.contains(connectorName)) {
+                continue;
+            }
+
+            // Check if this is under the steps/ subdirectory
+            final String afterConnector = entryName.substring(nextSlashIndex + 1);
+            if (!afterConnector.startsWith("steps/")) {
+                continue;
+            }
+
+            if (jarEntry.isDirectory()) {
+                continue;
+            }
+
+            // Get the step documentation filename (e.g., "Configure_Connection.md")
+            final String stepFileName = afterConnector.substring(6); // Remove "steps/"
+            if (stepFileName.isEmpty()) {
+                continue;
+            }
+
+            getLog().debug("Found step documentation file " + entryName + " in " + file + " for connector " + connectorName);
+            final File connectorDirectory = new File(stepDocumentationDir, connectorName);
+            final File destinationFile = new File(connectorDirectory, stepFileName);
+
+            createDirectory(destinationFile.getParentFile());
+
+            try (final InputStream in = jarFile.getInputStream(jarEntry);
+                 final OutputStream out = new FileOutputStream(destinationFile)) {
+                copy(in, out);
+            }
+        }
+    }
 
     private ExtensionClassLoaderFactory createClassLoaderFactory() {
         return new ExtensionClassLoaderFactory.Builder()
@@ -1087,6 +1210,11 @@ public class NarMojo extends AbstractMojo {
             File additionalDetailsDirectory = new File(extensionDocsFile.getParentFile(), "additional-details");
             if (additionalDetailsDirectory.exists()) {
                 archiver.getArchiver().addDirectory(additionalDetailsDirectory, "META-INF/docs/additional-details/");
+            }
+
+            File stepDocumentationDirectory = new File(extensionDocsFile.getParentFile(), "steps");
+            if (stepDocumentationDirectory.exists()) {
+                archiver.getArchiver().addDirectory(stepDocumentationDirectory, "META-INF/docs/steps/");
             }
 
             File existingManifest = defaultManifestFile;
