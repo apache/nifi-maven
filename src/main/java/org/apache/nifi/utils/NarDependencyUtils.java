@@ -18,12 +18,13 @@ package org.apache.nifi.utils;
 
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.handler.ArtifactHandler;
+import org.apache.maven.model.Dependency;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.ProjectBuilder;
+import org.apache.maven.project.ProjectBuildingException;
 import org.apache.maven.project.ProjectBuildingRequest;
 import org.apache.maven.project.ProjectBuildingResult;
-import org.apache.maven.project.ProjectBuildingException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -54,21 +55,15 @@ public class NarDependencyUtils {
     }
 
     public static void ensureSingleNarDependencyExists(MavenProject project) throws MojoExecutionException {
-        // find the nar dependency
         boolean found = false;
-        for (final Artifact artifact : project.getDependencyArtifacts()) {
-            if (NAR.equals(artifact.getType())) {
-                // ensure the project doesn't have two nar dependencies
+        for (final Dependency dependency : project.getDependencies()) {
+            if (NAR.equals(dependency.getType())) {
                 if (found) {
                     throw new MojoExecutionException("Project can only have one NAR dependency.");
                 }
-
-                // record the nar dependency
                 found = true;
             }
         }
-
-        // ensure there is a nar dependency
         if (!found) {
             throw new MojoExecutionException("Project does not have any NAR dependencies.");
         }

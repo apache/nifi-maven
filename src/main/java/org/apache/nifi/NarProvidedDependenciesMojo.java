@@ -19,11 +19,9 @@ package org.apache.nifi;
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.handler.ArtifactHandler;
 import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
-import org.apache.maven.artifact.repository.ArtifactRepository;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
-import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
@@ -40,6 +38,7 @@ import org.apache.maven.shared.dependency.graph.traversal.DependencyNodeVisitor;
 import org.apache.nifi.utils.NarDependencyUtils;
 import org.eclipse.aether.RepositorySystemSession;
 
+import javax.inject.Inject;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
@@ -58,12 +57,6 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
     private MavenProject project;
 
     /**
-     * The local artifact repository.
-     */
-    @Parameter(defaultValue = "${localRepository}", readonly = true)
-    private ArtifactRepository localRepository;
-
-    /**
      * The {@link RepositorySystemSession} used for obtaining the local and remote artifact repositories.
      */
     @Parameter(defaultValue = "${repositorySystemSession}", readonly = true)
@@ -79,20 +72,20 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
     /**
      * The dependency tree builder to use for verbose output.
      */
-    @Component
+    @Inject
     private DependencyGraphBuilder dependencyGraphBuilder;
 
     /**
      * *
      * The {@link ArtifactHandlerManager} into which any extension {@link ArtifactHandler} instances should have been injected when the extensions were loaded.
      */
-    @Component
+    @Inject
     private ArtifactHandlerManager artifactHandlerManager;
 
     /**
-     * The {@link ProjectBuilder} used to generate the {@link MavenProject} for the nar artifact the dependency tree is being generated for.
+     * The {@link ProjectBuilder} used to generate the {@code MavenProject} for the nar artifact the dependency tree is being generated for.
      */
-    @Component
+    @Inject
     private ProjectBuilder projectBuilder;
 
     /*

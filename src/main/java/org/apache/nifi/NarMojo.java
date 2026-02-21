@@ -20,7 +20,6 @@ import org.apache.maven.archiver.MavenArchiveConfiguration;
 import org.apache.maven.archiver.MavenArchiver;
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.DependencyResolutionRequiredException;
-import org.apache.maven.artifact.factory.ArtifactFactory;
 import org.apache.maven.artifact.handler.ArtifactHandler;
 import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
 import org.apache.maven.artifact.installer.ArtifactInstaller;
@@ -33,7 +32,6 @@ import org.apache.maven.artifact.resolver.DefaultArtifactResolver;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
@@ -43,9 +41,11 @@ import org.apache.maven.plugins.dependency.utils.DependencyUtil;
 import org.apache.maven.plugins.dependency.utils.filters.DestFileFilter;
 import org.apache.maven.plugins.dependency.utils.translators.ArtifactTranslator;
 import org.apache.maven.plugins.dependency.utils.translators.ClassifierTypeTranslator;
+import org.apache.maven.model.Dependency;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.MavenProjectHelper;
 import org.apache.maven.project.ProjectBuilder;
+import org.apache.maven.repository.RepositorySystem;
 import org.apache.maven.shared.artifact.filter.collection.ArtifactFilterException;
 import org.apache.maven.shared.artifact.filter.collection.ArtifactIdFilter;
 import org.apache.maven.shared.artifact.filter.collection.ArtifactsFilter;
@@ -66,12 +66,15 @@ import org.apache.nifi.extension.definition.extraction.ExtensionDefinitionFactor
 import org.apache.nifi.extension.definition.extraction.StandardServiceAPIDefinition;
 import org.codehaus.plexus.archiver.ArchiverException;
 import org.codehaus.plexus.archiver.jar.JarArchiver;
+import org.codehaus.plexus.archiver.util.DefaultFileSet;
 import org.codehaus.plexus.archiver.jar.ManifestException;
 import org.codehaus.plexus.archiver.manager.ArchiverManager;
 import org.codehaus.plexus.util.FileUtils;
 import org.codehaus.plexus.util.StringUtils;
 import org.eclipse.aether.RepositorySystemSession;
 
+import javax.inject.Inject;
+import javax.inject.Named;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
@@ -86,18 +89,18 @@ import java.lang.reflect.Method;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Files;
-import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TimeZone;
 import java.util.TreeSet;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
@@ -122,7 +125,7 @@ public class NarMojo extends AbstractMojo {
     private static final String[] DEFAULT_EXCLUDES = new String[]{"**/package.html"};
     private static final String[] DEFAULT_INCLUDES = new String[]{"**/**"};
 
-    private static final String BUILD_TIMESTAMP_FORMAT = "yyyy-MM-dd'T'HH:mm:ss'Z'";
+    private static final DateTimeFormatter BUILD_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'").withZone(ZoneOffset.UTC);
 
     /**
      * POM
@@ -156,7 +159,7 @@ public class NarMojo extends AbstractMojo {
      *
      * \@\component role="org.codehaus.plexus.archiver.Archiver" roleHint="jar"
      */
-    @Component(role = org.codehaus.plexus.archiver.Archiver.class, hint = "jar")
+    @Inject @Named("jar")
     private JarArchiver jarArchiver;
     /**
      * The archive configuration to use.
@@ -185,7 +188,7 @@ public class NarMojo extends AbstractMojo {
     @Parameter(property = "nar.useDefaultManifestFile", defaultValue = "false")
     protected boolean useDefaultManifestFile;
 
-    @Component
+    @Inject
     protected MavenProjectHelper projectHelper;
 
     /**
@@ -203,10 +206,10 @@ public class NarMojo extends AbstractMojo {
     @Parameter(property = "classifier")
     protected String classifier;
 
-    @Component
+    @Inject
     protected ArtifactInstaller installer;
 
-    @Component
+    @Inject
     protected ArtifactRepositoryFactory repositoryFactory;
 
     /**
@@ -339,14 +342,14 @@ public class NarMojo extends AbstractMojo {
     /**
      * Used to look up Artifacts in the remote repository.
      */
-    @Component
-    protected ArtifactFactory factory;
+    @Inject
+    protected RepositorySystem repositorySystem;
 
     /**
      * Used to look up Artifacts in the remote repository.
      *
      */
-    @Component
+    @Inject
     protected ArtifactResolver resolver;
 
     /**
@@ -367,7 +370,7 @@ public class NarMojo extends AbstractMojo {
      * To look up Archiver/UnArchiver implementations
      *
      */
-    @Component
+    @Inject
     protected ArchiverManager archiverManager;
 
     /**
@@ -387,14 +390,14 @@ public class NarMojo extends AbstractMojo {
     /**
      * The dependency tree builder to use for verbose output.
      */
-    @Component
+    @Inject
     private DependencyGraphBuilder dependencyGraphBuilder;
 
     /**
      * *
      * The {@link ArtifactHandlerManager} into which any extension {@link ArtifactHandler} instances should have been injected when the extensions were loaded.
      */
-    @Component
+    @Inject
     private ArtifactHandlerManager artifactHandlerManager;
 
 
@@ -482,9 +485,9 @@ public class NarMojo extends AbstractMojo {
 
 
     /**
-     * The {@link ProjectBuilder} used to generate the {@link MavenProject} for the nar artifact the dependency tree is being generated for.
+     * The {@link ProjectBuilder} used to generate the {@code MavenProject} for the nar artifact the dependency tree is being generated for.
      */
-    @Component
+    @Inject
     private ProjectBuilder projectBuilder;
 
     /**
@@ -1028,7 +1031,7 @@ public class NarMojo extends AbstractMojo {
     }
 
     protected Artifact getResolvedPomArtifact(Artifact artifact) {
-        Artifact pomArtifact = this.factory.createArtifact(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion(), "", "pom");
+        Artifact pomArtifact = this.repositorySystem.createArtifact(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion(), "pom");
         // Resolve the pom artifact using repos
         ArtifactResolutionRequest artifactResolutionRequest = getArtifactResolutionRequest(pomArtifact);
         ArtifactResolutionResult artifactResolutionResult = this.resolver.resolve(artifactResolutionRequest);
@@ -1061,7 +1064,13 @@ public class NarMojo extends AbstractMojo {
         // add filters in well known order, least specific to most specific
         FilterArtifacts filter = new FilterArtifacts();
 
-        filter.addFilter(new ProjectTransitivityFilter(project.getDependencyArtifacts(), false));
+        final Set<String> directDependencyKeys = project.getDependencies().stream()
+                .map(d -> d.getGroupId() + ":" + d.getArtifactId())
+                .collect(Collectors.toSet());
+        final Set<Artifact> directArtifacts = project.getArtifacts().stream()
+                .filter(a -> directDependencyKeys.contains(a.getGroupId() + ":" + a.getArtifactId()))
+                .collect(Collectors.toSet());
+        filter.addFilter(new ProjectTransitivityFilter(directArtifacts, false));
         filter.addFilter(new ScopeFilter(this.includeScope, this.excludeScope));
         filter.addFilter(new TypeFilter(this.includeTypes, this.excludeTypes));
         filter.addFilter(new ClassifierFilter(this.includeClassifiers, this.excludeClassifiers));
@@ -1189,13 +1198,13 @@ public class NarMojo extends AbstractMojo {
         archiver.setCreatedBy("Apache NiFi Nar Maven Plugin", "org.apache.nifi", "nifi-nar-maven-plugin");
         archiver.setArchiver(jarArchiver);
         archiver.setOutputFile(narFile);
-        Date timestamp = archiver.configureReproducible(outputTimestamp); // configure for Reproducible Builds based on outputTimestamp value
+        archiver.configureReproducibleBuild(outputTimestamp);
         archive.setForced(forceCreation);
 
         try {
             File contentDirectory = getClassesDirectory();
             if (contentDirectory.exists()) {
-                archiver.getArchiver().addDirectory(contentDirectory, getIncludes(), getExcludes());
+                archiver.getArchiver().addFileSet(DefaultFileSet.fileSet(contentDirectory).include(getIncludes()).exclude(getExcludes()));
             } else {
                 getLog().warn("NAR will be empty - no content was marked for inclusion!");
             }
@@ -1209,12 +1218,12 @@ public class NarMojo extends AbstractMojo {
 
             File additionalDetailsDirectory = new File(extensionDocsFile.getParentFile(), "additional-details");
             if (additionalDetailsDirectory.exists()) {
-                archiver.getArchiver().addDirectory(additionalDetailsDirectory, "META-INF/docs/additional-details/");
+                archiver.getArchiver().addFileSet(DefaultFileSet.fileSet(additionalDetailsDirectory).prefixed("META-INF/docs/additional-details/"));
             }
 
             File stepDocumentationDirectory = new File(extensionDocsFile.getParentFile(), "steps");
             if (stepDocumentationDirectory.exists()) {
-                archiver.getArchiver().addDirectory(stepDocumentationDirectory, "META-INF/docs/steps/");
+                archiver.getArchiver().addFileSet(DefaultFileSet.fileSet(stepDocumentationDirectory).prefixed("META-INF/docs/steps/"));
             }
 
             File existingManifest = defaultManifestFile;
@@ -1252,9 +1261,8 @@ public class NarMojo extends AbstractMojo {
                 archive.addManifestEntry("Build-Revision", buildRevision);
             }
 
-            SimpleDateFormat dateFormat = new SimpleDateFormat(BUILD_TIMESTAMP_FORMAT);
-            dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-            archive.addManifestEntry("Build-Timestamp", dateFormat.format(timestamp == null ? new Date() : timestamp));
+            final Instant buildTimestamp = MavenArchiver.parseBuildOutputTimestamp(outputTimestamp).orElse(Instant.now());
+            archive.addManifestEntry("Build-Timestamp", BUILD_TIMESTAMP_FORMATTER.format(buildTimestamp));
 
             archive.addManifestEntry("Clone-During-Instance-Class-Loading", String.valueOf(cloneDuringInstanceClassLoading));
 
