@@ -79,7 +79,7 @@ public class NarDuplicateDependenciesMojo extends AbstractMojo {
     private ArtifactHandlerManager artifactHandlerManager;
 
     /**
-     * The {@link ProjectBuilder} used to generate the {@link MavenProject} for the nar artifact the dependency tree is being generated for.
+     * The {@link ProjectBuilder} used to generate the {@code MavenProject} for the nar artifact the dependency tree is being generated for.
      */
     @Component
     private ProjectBuilder projectBuilder;
