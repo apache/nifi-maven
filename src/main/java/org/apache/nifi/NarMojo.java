@@ -86,9 +86,14 @@ import java.io.OutputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.security.KeyStore;
+import java.security.cert.X509Certificate;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -105,6 +110,8 @@ import java.util.TreeSet;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.stream.Collectors;
+import java.util.zip.ZipFile;
+import jdk.security.jarsigner.JarSigner;
 
 /**
  * Packages the current project as an Apache NiFi Archive (NAR).
@@ -476,6 +483,51 @@ public class NarMojo extends AbstractMojo {
 
     @Parameter(property = "skipDocGeneration", defaultValue = "false")
     protected boolean skipDocGeneration;
+
+    /**
+     * Whether to sign the produced NAR file. Requires signKeystore, signStorepass, and signAlias.
+     */
+    @Parameter(property = "nar.sign", defaultValue = "false")
+    protected boolean sign;
+
+    /**
+     * Path to the keystore file containing the signing key.
+     */
+    @Parameter(property = "nar.sign.keystore")
+    protected String signKeystore;
+
+    /**
+     * Password for the keystore. Supports Maven password encryption via settings-security.xml.
+     */
+    @Parameter(property = "nar.sign.storepass")
+    protected String signStorepass;
+
+    /**
+     * Alias of the key entry in the keystore to use for signing.
+     */
+    @Parameter(property = "nar.sign.alias")
+    protected String signAlias;
+
+    /**
+     * Password for the key entry. Defaults to the keystore password if not specified.
+     */
+    @Parameter(property = "nar.sign.keypass")
+    protected String signKeypass;
+
+    /**
+     * Keystore type. Defaults to PKCS12.
+     */
+    @Parameter(property = "nar.sign.storetype", defaultValue = "PKCS12")
+    protected String signStoretype;
+
+    /**
+     * URL of a Time Stamping Authority (TSA) for timestamping the signature.
+     * When set, the signature includes a trusted timestamp so that it remains
+     * valid even after the signing certificate expires.
+     * Example: http://timestamp.digicert.com
+     */
+    @Parameter(property = "nar.sign.tsa")
+    protected String signTsa;
 
     /**
      * The {@link RepositorySystemSession} used for obtaining the local and remote artifact repositories.
@@ -1176,8 +1228,20 @@ public class NarMojo extends AbstractMojo {
     }
 
     private void makeNar() throws MojoExecutionException {
+        KeyStore.PrivateKeyEntry privateKeyEntry = null;
+
+        if (sign) {
+            privateKeyEntry = loadSigningKey();
+            final X509Certificate signerCert = (X509Certificate) privateKeyEntry.getCertificate();
+            archive.addManifestEntry("Nar-Signed-By", signerCert.getSubjectX500Principal().getName());
+        }
+
         final NarResult narResult = createArchive();
         final File narFile = narResult.getNarFile();
+
+        if (sign) {
+            signNar(narFile, privateKeyEntry);
+        }
 
         if (classifier != null) {
             projectHelper.attachArtifact(project, "nar", classifier, narFile);
@@ -1188,6 +1252,65 @@ public class NarMojo extends AbstractMojo {
         final File extensionDocsFile = narResult.getExtensionDocsFile();
         if (extensionDocsFile != null && !skipDocGeneration) {
             projectHelper.attachArtifact(project, "xml", "nar-extension-manifest", extensionDocsFile);
+        }
+    }
+
+    KeyStore.PrivateKeyEntry loadSigningKey() throws MojoExecutionException {
+        if (!notEmpty(signKeystore)) {
+            throw new MojoExecutionException("NAR signing is enabled but nar.sign.keystore is not configured");
+        }
+        if (!notEmpty(signStorepass)) {
+            throw new MojoExecutionException("NAR signing is enabled but nar.sign.storepass is not configured");
+        }
+        if (!notEmpty(signAlias)) {
+            throw new MojoExecutionException("NAR signing is enabled but nar.sign.alias is not configured");
+        }
+
+        try {
+            final KeyStore keyStore = KeyStore.getInstance(signStoretype);
+            try (final InputStream keystoreStream = Files.newInputStream(Path.of(signKeystore))) {
+                keyStore.load(keystoreStream, signStorepass.toCharArray());
+            }
+
+            final char[] keyPassword = notEmpty(signKeypass) ? signKeypass.toCharArray() : signStorepass.toCharArray();
+            final KeyStore.PrivateKeyEntry privateKeyEntry = (KeyStore.PrivateKeyEntry) keyStore.getEntry(
+                    signAlias, new KeyStore.PasswordProtection(keyPassword));
+
+            if (privateKeyEntry == null) {
+                throw new MojoExecutionException(
+                        "No private key entry found in keystore [%s] with alias [%s]".formatted(signKeystore, signAlias));
+            }
+
+            return privateKeyEntry;
+        } catch (final MojoExecutionException e) {
+            throw e;
+        } catch (final Exception e) {
+            throw new MojoExecutionException("Failed to load signing key from keystore [%s]".formatted(signKeystore), e);
+        }
+    }
+
+    void signNar(final File narFile, final KeyStore.PrivateKeyEntry privateKeyEntry) throws MojoExecutionException {
+        getLog().info("Signing NAR: " + narFile.getName());
+
+        try {
+            final JarSigner.Builder builder = new JarSigner.Builder(privateKeyEntry).digestAlgorithm("SHA-256");
+
+            if (notEmpty(signTsa)) {
+                builder.tsa(URI.create(signTsa));
+            }
+
+            final JarSigner signer = builder.build();
+
+            final File signedFile = new File(narFile.getParentFile(), narFile.getName() + ".signed");
+            try (final ZipFile zipFile = new ZipFile(narFile);
+                 final OutputStream outputStream = new FileOutputStream(signedFile)) {
+                signer.sign(zipFile, outputStream);
+            }
+
+            Files.move(signedFile.toPath(), narFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            getLog().info("Signed NAR [%s] with alias [%s] from keystore [%s]".formatted(narFile.getName(), signAlias, signKeystore));
+        } catch (final Exception e) {
+            throw new MojoExecutionException("Failed to sign NAR: " + narFile.getName(), e);
         }
     }
 
