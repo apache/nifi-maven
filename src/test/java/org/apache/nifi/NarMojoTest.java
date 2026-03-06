@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class NarMojoTest {
 
     @Test
-    void testValidateCustomManifestEntryKeysAcceptsValidKeys() throws MojoExecutionException {
+    void testValidateManifestEntryKeysAcceptsValidKeys() throws MojoExecutionException {
         final Map<String, String> entries = new LinkedHashMap<>();
         entries.put("vendor", "Acme Corp");
         entries.put("support-url", "https://acme.corp/support");
@@ -37,56 +37,51 @@ class NarMojoTest {
         entries.put("Tier-1", "gold");
         entries.put("ABC123", "test");
 
-        NarMojo.validateCustomManifestEntryKeys(entries);
+        NarMojo.validateManifestEntryKeys(entries);
     }
 
     @Test
-    void testValidateCustomManifestEntryKeysRejectsEmptyKey() {
+    void testValidateManifestEntryKeysRejectsEmptyKey() {
         final Map<String, String> entries = new HashMap<>();
         entries.put("", "some-value");
 
         final MojoExecutionException exception = assertThrows(MojoExecutionException.class,
-                () -> NarMojo.validateCustomManifestEntryKeys(entries));
-        assertEquals("Custom manifest entry key must not be null or empty", exception.getMessage());
+                () -> NarMojo.validateManifestEntryKeys(entries));
+        assertEquals("Manifest entry key must not be null or empty", exception.getMessage());
     }
 
     @Test
-    void testValidateCustomManifestEntryKeysRejectsKeyWithSpaces() {
+    void testValidateManifestEntryKeysRejectsKeyWithSpaces() {
         final Map<String, String> entries = new HashMap<>();
         entries.put("my key", "value");
 
         final MojoExecutionException exception = assertThrows(MojoExecutionException.class,
-                () -> NarMojo.validateCustomManifestEntryKeys(entries));
-        assertEquals("Custom manifest entry key 'my key' contains invalid characters. Keys must match [A-Za-z0-9_-]+", exception.getMessage());
+                () -> NarMojo.validateManifestEntryKeys(entries));
+        assertEquals("Manifest entry key 'my key' contains invalid characters. Keys must match [A-Za-z0-9_-]+", exception.getMessage());
     }
 
     @Test
-    void testValidateCustomManifestEntryKeysRejectsKeyWithColon() {
+    void testValidateManifestEntryKeysRejectsKeyWithColon() {
         final Map<String, String> entries = new HashMap<>();
         entries.put("key:name", "value");
 
         final MojoExecutionException exception = assertThrows(MojoExecutionException.class,
-                () -> NarMojo.validateCustomManifestEntryKeys(entries));
-        assertEquals("Custom manifest entry key 'key:name' contains invalid characters. Keys must match [A-Za-z0-9_-]+", exception.getMessage());
+                () -> NarMojo.validateManifestEntryKeys(entries));
+        assertEquals("Manifest entry key 'key:name' contains invalid characters. Keys must match [A-Za-z0-9_-]+", exception.getMessage());
     }
 
     @Test
-    void testValidateCustomManifestEntryKeysRejectsKeyWithDot() {
+    void testValidateManifestEntryKeysRejectsKeyWithDot() {
         final Map<String, String> entries = new HashMap<>();
         entries.put("key.name", "value");
 
         final MojoExecutionException exception = assertThrows(MojoExecutionException.class,
-                () -> NarMojo.validateCustomManifestEntryKeys(entries));
-        assertEquals("Custom manifest entry key 'key.name' contains invalid characters. Keys must match [A-Za-z0-9_-]+", exception.getMessage());
+                () -> NarMojo.validateManifestEntryKeys(entries));
+        assertEquals("Manifest entry key 'key.name' contains invalid characters. Keys must match [A-Za-z0-9_-]+", exception.getMessage());
     }
 
     @Test
-    void testValidateCustomManifestEntryKeysAcceptsEmptyMap() throws MojoExecutionException {
-        NarMojo.validateCustomManifestEntryKeys(Map.of());
-    }
-
-    @Test
-    void testNarCustomPrefixValue() {
-        assertEquals("Nar-Custom-", NarMojo.NAR_CUSTOM_PREFIX);
+    void testValidateManifestEntryKeysAcceptsEmptyMap() throws MojoExecutionException {
+        NarMojo.validateManifestEntryKeys(Map.of());
     }
 }
