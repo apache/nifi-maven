@@ -17,6 +17,12 @@
 package org.apache.nifi;
 
 import org.apache.maven.plugin.MojoExecutionException;
+import org.bouncycastle.asn1.x500.X500Name;
+import org.bouncycastle.cert.X509CertificateHolder;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.operator.ContentSigner;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -24,12 +30,21 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.CodeSigner;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
 import java.security.KeyStore;
+import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
+import java.security.spec.ECGenParameterSpec;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
@@ -39,7 +54,6 @@ import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -59,22 +73,31 @@ class NarMojoTest {
     static void createTestKeystore() throws Exception {
         testKeystorePath = tempDir.resolve("test-keystore.p12");
 
-        final ProcessBuilder pb = new ProcessBuilder(
-                "keytool", "-genkeypair",
-                "-alias", TEST_ALIAS,
-                "-keyalg", "EC",
-                "-keysize", "256",
-                "-sigalg", "SHA256withECDSA",
-                "-validity", "365",
-                "-storetype", "PKCS12",
-                "-keystore", testKeystorePath.toString(),
-                "-storepass", TEST_PASSWORD,
-                "-dname", "CN=Test NAR Signer, O=Apache NiFi Test, C=US"
-        );
-        pb.inheritIO();
-        final Process process = pb.start();
-        assertEquals(0, process.waitFor(), "keytool must succeed");
-        assertTrue(Files.exists(testKeystorePath), "Keystore file must exist after generation");
+        final KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("EC");
+        keyPairGenerator.initialize(new ECGenParameterSpec("secp256r1"));
+        final KeyPair keyPair = keyPairGenerator.generateKeyPair();
+
+        final X500Name subject = new X500Name("CN=Test NAR Signer, O=Apache NiFi Test, C=US");
+        final Instant now = Instant.now();
+        final ContentSigner contentSigner = new JcaContentSignerBuilder("SHA256withECDSA").build(keyPair.getPrivate());
+        final X509CertificateHolder certificateHolder = new JcaX509v3CertificateBuilder(
+                subject,
+                BigInteger.ONE,
+                Date.from(now),
+                Date.from(now.plus(365, ChronoUnit.DAYS)),
+                subject,
+                keyPair.getPublic()
+        ).build(contentSigner);
+
+        final X509Certificate certificate = new JcaX509CertificateConverter().getCertificate(certificateHolder);
+
+        final KeyStore keyStore = KeyStore.getInstance("PKCS12");
+        keyStore.load(null, null);
+        keyStore.setKeyEntry(TEST_ALIAS, keyPair.getPrivate(), TEST_PASSWORD.toCharArray(), new Certificate[]{certificate});
+
+        try (final OutputStream out = Files.newOutputStream(testKeystorePath)) {
+            keyStore.store(out, TEST_PASSWORD.toCharArray());
+        }
     }
 
     @Test
