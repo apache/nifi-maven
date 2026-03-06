@@ -79,8 +79,18 @@
         <inceptionYear>2014</inceptionYear>
         <mockito.version>5.21.0</mockito.version>
         <junit.version>6.0.3</junit.version>
+        <org.bouncycastle.version>1.83</org.bouncycastle.version>
         <slf4j.version>2.0.17</slf4j.version>
     </properties>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcpkix-jdk18on</artifactId>
+                <version>${org.bouncycastle.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
     <build>
         <pluginManagement>
             <plugins>
@@ -336,6 +346,11 @@
             <scope>provided</scope>
         </dependency>
         <!-- Test Dependencies -->
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcpkix-jdk18on</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
