@@ -104,6 +104,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -121,6 +122,9 @@ public class NarMojo extends AbstractMojo {
     private static final String CONNECTOR_CLASS_NAME = "org.apache.nifi.components.connector.Connector";
     private static final String DOCUMENTATION_WRITER_CLASS_NAME = "org.apache.nifi.documentation.xml.XmlDocumentationWriter";
     private static final String CONNECTOR_DOCUMENTATION_WRITER_CLASS_NAME = "org.apache.nifi.documentation.xml.XmlConnectorDocumentationWriter";
+
+    static final String NAR_CUSTOM_PREFIX = "Nar-Custom-";
+    static final Pattern VALID_MANIFEST_KEY_PATTERN = Pattern.compile("[A-Za-z0-9_-]+");
 
     private static final String[] DEFAULT_EXCLUDES = new String[]{"**/package.html"};
     private static final String[] DEFAULT_INCLUDES = new String[]{"**/**"};
@@ -476,6 +480,13 @@ public class NarMojo extends AbstractMojo {
 
     @Parameter(property = "skipDocGeneration", defaultValue = "false")
     protected boolean skipDocGeneration;
+
+    /**
+     * Custom key/value pairs to include in the NAR manifest with a {@code Nar-Custom-} prefix.
+     * Keys must match the JAR manifest attribute name specification: {@code [A-Za-z0-9_-]+}.
+     */
+    @Parameter(property = "customManifestEntries")
+    protected Map<String, String> customManifestEntries;
 
     /**
      * The {@link RepositorySystemSession} used for obtaining the local and remote artifact repositories.
@@ -1266,10 +1277,29 @@ public class NarMojo extends AbstractMojo {
 
             archive.addManifestEntry("Clone-During-Instance-Class-Loading", String.valueOf(cloneDuringInstanceClassLoading));
 
+            if (customManifestEntries != null) {
+                validateCustomManifestEntryKeys(customManifestEntries);
+                for (final Map.Entry<String, String> entry : customManifestEntries.entrySet()) {
+                    archive.addManifestEntry(NAR_CUSTOM_PREFIX + entry.getKey(), entry.getValue());
+                }
+            }
+
             archiver.createArchive(session, project, archive);
             return new NarResult(narFile, extensionDocsFile);
         } catch (ArchiverException | MojoExecutionException | ManifestException | IOException | DependencyResolutionRequiredException e) {
             throw new MojoExecutionException("Error assembling NAR", e);
+        }
+    }
+
+    static void validateCustomManifestEntryKeys(final Map<String, String> entries) throws MojoExecutionException {
+        for (final String key : entries.keySet()) {
+            if (key == null || key.isEmpty()) {
+                throw new MojoExecutionException("Custom manifest entry key must not be null or empty");
+            }
+            if (!VALID_MANIFEST_KEY_PATTERN.matcher(key).matches()) {
+                throw new MojoExecutionException(
+                        "Custom manifest entry key '%s' contains invalid characters. Keys must match [A-Za-z0-9_-]+".formatted(key));
+            }
         }
     }
 
