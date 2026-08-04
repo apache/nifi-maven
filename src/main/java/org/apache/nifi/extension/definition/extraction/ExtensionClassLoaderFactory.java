@@ -45,13 +45,16 @@ import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 public class ExtensionClassLoaderFactory {
 
@@ -319,7 +322,21 @@ public class ExtensionClassLoaderFactory {
         projectRequest.setUserProperties(System.getProperties());
         projectRequest.setLocalRepository(localRepo);
         projectRequest.setRemoteRepositories(remoteRepos);
+        projectRequest.setActiveProfileIds(getActiveProfileIds());
         return projectRequest;
+    }
+
+    private List<String> getActiveProfileIds() {
+        if (project.getInjectedProfileIds() == null) {
+            return new ArrayList<>();
+        } else {
+            return project.getInjectedProfileIds().values().stream()
+                    .filter(Objects::nonNull)
+                    .flatMap(Collection::stream)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .collect(Collectors.toList());
+        }
     }
 
     private Set<URL> toURLs(final Artifact artifact) throws MojoExecutionException {
