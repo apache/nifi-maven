@@ -60,6 +60,7 @@ import org.apache.maven.shared.transfer.artifact.ArtifactCoordinate;
 import org.apache.nifi.extension.definition.ExtensionDefinition;
 import org.apache.nifi.extension.definition.ExtensionType;
 import org.apache.nifi.extension.definition.ServiceAPIDefinition;
+import org.apache.nifi.extension.definition.ServiceDefinitionSetProvider;
 import org.apache.nifi.extension.definition.extraction.ExtensionClassLoader;
 import org.apache.nifi.extension.definition.extraction.ExtensionClassLoaderFactory;
 import org.apache.nifi.extension.definition.extraction.ExtensionDefinitionFactory;
@@ -771,9 +772,12 @@ public class NarMojo extends AbstractMojo {
             throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
         final Constructor<?> ctr = serviceApiClass.getConstructor(String.class, String.class, String.class, String.class);
 
+        final Set<ServiceAPIDefinition> sortedDefinitions = ServiceDefinitionSetProvider.newSet();
+        sortedDefinitions.addAll(serviceDefinitions);
+
         final List<Object> providedServices = new ArrayList<>();
 
-        for (final ServiceAPIDefinition definition : serviceDefinitions) {
+        for (final ServiceAPIDefinition definition : sortedDefinitions) {
             final Object serviceApi = ctr.newInstance(definition.getServiceAPIClassName(), definition.getServiceGroupId(), definition.getServiceArtifactId(), definition.getServiceVersion());
             providedServices.add(serviceApi);
         }
