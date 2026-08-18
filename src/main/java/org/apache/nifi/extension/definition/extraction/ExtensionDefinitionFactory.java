@@ -20,6 +20,7 @@ import org.apache.maven.artifact.Artifact;
 import org.apache.nifi.extension.definition.ExtensionDefinition;
 import org.apache.nifi.extension.definition.ExtensionType;
 import org.apache.nifi.extension.definition.ServiceAPIDefinition;
+import org.apache.nifi.extension.definition.ServiceDefinitionSetProvider;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -85,7 +86,7 @@ public class ExtensionDefinitionFactory {
             return Collections.emptySet();
         }
 
-        final Set<ServiceAPIDefinition> serviceApis = new HashSet<>();
+        final Set<ServiceAPIDefinition> serviceApis = ServiceDefinitionSetProvider.newSet();
         final Class<?> controllerServiceClass = Class.forName("org.apache.nifi.controller.ControllerService", false, extensionClassLoader);
         addProvidedServiceAPIs(controllerServiceClass, extensionClass, serviceApis);
         return serviceApis;
