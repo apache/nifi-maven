@@ -16,14 +16,11 @@
  */
 package org.apache.nifi.extension.definition.extraction;
 
+import org.apache.maven.RepositoryUtils;
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.DefaultArtifact;
 import org.apache.maven.artifact.handler.ArtifactHandler;
 import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
-import org.apache.maven.artifact.repository.ArtifactRepository;
-import org.apache.maven.artifact.resolver.ArtifactResolutionRequest;
-import org.apache.maven.artifact.resolver.ArtifactResolutionResult;
-import org.apache.maven.artifact.resolver.ArtifactResolver;
 import org.apache.maven.artifact.resolver.filter.ArtifactFilter;
 import org.apache.maven.artifact.resolver.filter.ExclusionSetFilter;
 import org.apache.maven.artifact.versioning.VersionRange;
@@ -35,11 +32,17 @@ import org.apache.maven.project.ProjectBuilder;
 import org.apache.maven.project.ProjectBuildingException;
 import org.apache.maven.project.ProjectBuildingRequest;
 import org.apache.maven.project.ProjectBuildingResult;
-import org.apache.maven.shared.dependency.graph.DependencyGraphBuilder;
-import org.apache.maven.shared.dependency.graph.DependencyGraphBuilderException;
-import org.apache.maven.shared.dependency.graph.DependencyNode;
-import org.apache.maven.shared.dependency.graph.traversal.DependencyNodeVisitor;
+import org.apache.nifi.dependency.DependencyGraphBuilder;
+import org.apache.nifi.dependency.DependencyGraphException;
+import org.apache.nifi.dependency.DependencyNode;
+import org.apache.nifi.dependency.DependencyNodeVisitor;
+import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
+import org.eclipse.aether.resolution.ArtifactRequest;
+import org.eclipse.aether.resolution.ArtifactResolutionException;
+import org.eclipse.aether.resolution.VersionRangeRequest;
+import org.eclipse.aether.resolution.VersionRangeResolutionException;
+import org.eclipse.aether.resolution.VersionRangeResult;
 
 import java.io.File;
 import java.net.MalformedURLException;
@@ -70,10 +73,9 @@ public class ExtensionClassLoaderFactory {
     private final MavenProject project;
     private final RepositorySystemSession repoSession;
     private final ProjectBuilder projectBuilder;
-    private final ArtifactRepository localRepo;
-    private final List<ArtifactRepository> remoteRepos;
+    private final ProjectBuildingRequest projectBuildingRequest;
     private final DependencyGraphBuilder dependencyGraphBuilder;
-    private final ArtifactResolver artifactResolver;
+    private final RepositorySystem repositorySystem;
     private final ArtifactHandlerManager artifactHandlerManager;
 
     private ExtensionClassLoaderFactory(final Builder builder) {
@@ -81,10 +83,9 @@ public class ExtensionClassLoaderFactory {
         this.project = builder.project;
         this.repoSession = builder.repositorySession;
         this.projectBuilder = builder.projectBuilder;
-        this.localRepo = builder.localRepo;
-        this.remoteRepos = new ArrayList<>(builder.remoteRepos);
+        this.projectBuildingRequest = builder.projectBuildingRequest;
         this.dependencyGraphBuilder = builder.dependencyGraphBuilder;
-        this.artifactResolver = builder.artifactResolver;
+        this.repositorySystem = builder.repositorySystem;
         this.artifactHandlerManager = builder.artifactHandlerManager;
     }
 
@@ -209,34 +210,37 @@ public class ExtensionClassLoaderFactory {
 
         final Artifact artifact = new DefaultArtifact(groupId, artifactId, versionRange, null, "jar", null, handler);
 
-        final ArtifactResolutionRequest request = new ArtifactResolutionRequest();
-        request.setLocalRepository(localRepo);
-        request.setRemoteRepositories(remoteRepos);
-        request.setArtifact(artifact);
+        org.eclipse.aether.artifact.Artifact coordinates = new org.eclipse.aether.artifact.DefaultArtifact(groupId, artifactId, handler.getExtension(), version);
+        if (versionRange.hasRestrictions()) {
+            coordinates = coordinates.setVersion(highestVersion(coordinates, artifact));
+        }
 
-        final ArtifactResolutionResult result = artifactResolver.resolve(request);
-        if (!result.isSuccess()) {
-            final List<Exception> exceptions = result.getExceptions();
+        return RepositoryUtils.toArtifact(resolve(coordinates, artifact));
+    }
 
+    private String highestVersion(final org.eclipse.aether.artifact.Artifact coordinates, final Artifact artifact) throws MojoExecutionException {
+        final VersionRangeResult result;
+        try {
+            result = repositorySystem.resolveVersionRange(repoSession, new VersionRangeRequest(coordinates, project.getRemoteProjectRepositories(), null));
+        } catch (final VersionRangeResolutionException e) {
             final MojoExecutionException exception = new MojoExecutionException("Could not resolve local dependency " + artifact);
-            if (exceptions != null) {
-                for (final Exception e : exceptions) {
-                    exception.addSuppressed(e);
-                }
-            }
-
+            exception.addSuppressed(e);
             throw exception;
         }
-
-        final Set<Artifact> artifacts = result.getArtifacts();
-        if (artifacts.isEmpty()) {
+        if (result.getHighestVersion() == null) {
             throw new MojoExecutionException("Could not resolve any artifacts for dependency " + artifact);
         }
+        return result.getHighestVersion().toString();
+    }
 
-        final List<Artifact> sorted = new ArrayList<>(artifacts);
-        Collections.sort(sorted);
-
-        return sorted.get(0);
+    private org.eclipse.aether.artifact.Artifact resolve(final org.eclipse.aether.artifact.Artifact coordinates, final Artifact artifact) throws MojoExecutionException {
+        try {
+            return repositorySystem.resolveArtifact(repoSession, new ArtifactRequest(coordinates, project.getRemoteProjectRepositories(), null)).getArtifact();
+        } catch (final ArtifactResolutionException e) {
+            final MojoExecutionException exception = new MojoExecutionException("Could not resolve local dependency " + artifact);
+            exception.addSuppressed(e);
+            throw exception;
+        }
     }
 
     private ExtensionClassLoader createProvidedEntitiesClassLoader(final ArtifactsHolder artifactsHolder)
@@ -309,19 +313,18 @@ public class ExtensionClassLoaderFactory {
             final ArtifactFilter excludesFilter = new ExclusionSetFilter(EXCLUDED_ARTIFACT_IDS);
             final DependencyNode depNode = dependencyGraphBuilder.buildDependencyGraph(projectRequest, excludesFilter);
             depNode.accept(nodeVisitor);
-        } catch (DependencyGraphBuilderException e) {
+        } catch (DependencyGraphException e) {
             throw new MojoExecutionException("Failed to build dependency tree", e);
         }
         return artifacts;
     }
 
     private ProjectBuildingRequest createProjectBuildingRequest() {
-        final ProjectBuildingRequest projectRequest = new DefaultProjectBuildingRequest();
+        final ProjectBuildingRequest projectRequest = new DefaultProjectBuildingRequest(projectBuildingRequest);
         projectRequest.setRepositorySession(repoSession);
         projectRequest.setSystemProperties(System.getProperties());
         projectRequest.setUserProperties(System.getProperties());
-        projectRequest.setLocalRepository(localRepo);
-        projectRequest.setRemoteRepositories(remoteRepos);
+        projectRequest.setRemoteRepositories(project.getRemoteArtifactRepositories());
         projectRequest.setActiveProfileIds(getActiveProfileIds());
         return projectRequest;
     }
@@ -346,21 +349,11 @@ public class ExtensionClassLoaderFactory {
         if (artifactFile == null) {
             getLog().debug("Attempting to resolve Artifact " + artifact + " because it has no File associated with it");
 
-            final ArtifactResolutionRequest request = new ArtifactResolutionRequest();
-            request.setLocalRepository(localRepo);
-            request.setRemoteRepositories(remoteRepos);
-            request.setArtifact(artifact);
+            final Artifact resolved = RepositoryUtils.toArtifact(resolve(RepositoryUtils.toArtifact(artifact), artifact));
 
-            final ArtifactResolutionResult result = artifactResolver.resolve(request);
-            if (!result.isSuccess()) {
-                throw new MojoExecutionException("Could not resolve local dependency " + artifact);
-            }
+            getLog().debug("Resolved Artifact " + artifact + " to " + resolved.getFile());
 
-            getLog().debug("Resolved Artifact " + artifact + " to " + result.getArtifacts());
-
-            for (final Artifact resolved : result.getArtifacts()) {
-                urls.addAll(toURLs(resolved));
-            }
+            urls.addAll(toURLs(resolved));
         } else {
             try {
                 final URL url = artifact.getFile().toURI().toURL();
@@ -382,10 +375,9 @@ public class ExtensionClassLoaderFactory {
     public static class Builder {
         private Log log;
         private MavenProject project;
-        private ArtifactRepository localRepo;
-        private List<ArtifactRepository> remoteRepos;
+        private ProjectBuildingRequest projectBuildingRequest;
         private DependencyGraphBuilder dependencyGraphBuilder;
-        private ArtifactResolver artifactResolver;
+        private RepositorySystem repositorySystem;
         private ProjectBuilder projectBuilder;
         private RepositorySystemSession repositorySession;
         private ArtifactHandlerManager artifactHandlerManager;
@@ -405,13 +397,12 @@ public class ExtensionClassLoaderFactory {
             return this;
         }
 
-        public Builder localRepository(final ArtifactRepository localRepo) {
-            this.localRepo = localRepo;
-            return this;
-        }
-
-        public Builder remoteRepositories(final List<ArtifactRepository> remoteRepos) {
-            this.remoteRepos = remoteRepos;
+        /**
+         * @param projectBuildingRequest the request of the Maven session, which requests to build the projects of
+         *     dependencies start from
+         */
+        public Builder projectBuildingRequest(final ProjectBuildingRequest projectBuildingRequest) {
+            this.projectBuildingRequest = projectBuildingRequest;
             return this;
         }
 
@@ -420,8 +411,8 @@ public class ExtensionClassLoaderFactory {
             return this;
         }
 
-        public Builder artifactResolver(final ArtifactResolver resolver) {
-            this.artifactResolver = resolver;
+        public Builder repositorySystem(final RepositorySystem repositorySystem) {
+            this.repositorySystem = repositorySystem;
             return this;
         }
 

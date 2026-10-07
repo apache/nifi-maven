@@ -18,7 +18,6 @@ package org.apache.nifi;
 
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.handler.ArtifactHandler;
-import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -31,10 +30,10 @@ import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.ProjectBuilder;
 import org.apache.maven.project.ProjectBuildingException;
 import org.apache.maven.project.ProjectBuildingRequest;
-import org.apache.maven.shared.dependency.graph.DependencyCollectorBuilder;
-import org.apache.maven.shared.dependency.graph.DependencyCollectorBuilderException;
-import org.apache.maven.shared.dependency.graph.DependencyNode;
-import org.apache.maven.shared.dependency.graph.traversal.DependencyNodeVisitor;
+import org.apache.nifi.dependency.DependencyGraphBuilder;
+import org.apache.nifi.dependency.DependencyGraphException;
+import org.apache.nifi.dependency.DependencyNode;
+import org.apache.nifi.dependency.DependencyNodeVisitor;
 import org.apache.nifi.utils.NarDependencyUtils;
 import org.eclipse.aether.RepositorySystemSession;
 
@@ -66,17 +65,11 @@ public class NarDuplicateDependenciesMojo extends AbstractMojo {
 
 
     /**
-     * The dependency tree builder to use for verbose output.
+     * Builds the verbose dependency graph in which duplicate dependencies are looked for.
      */
     @Inject
-    private DependencyCollectorBuilder dependencyCollectorBuilder;
+    private DependencyGraphBuilder dependencyGraphBuilder;
 
-    /**
-     * *
-     * The {@link ArtifactHandlerManager} into which any extension {@link ArtifactHandler} instances should have been injected when the extensions were loaded.
-     */
-    @Inject
-    private ArtifactHandlerManager artifactHandlerManager;
 
     /**
      * The {@link ProjectBuilder} used to generate the {@code MavenProject} for the nar artifact the dependency tree is being generated for.
@@ -96,10 +89,10 @@ public class NarDuplicateDependenciesMojo extends AbstractMojo {
             narRequest.setRepositorySession(repoSession);
             narRequest.setSystemProperties(System.getProperties());
 
-            artifactHandlerManager.addHandlers(NarDependencyUtils.createNarHandlerMap(narRequest, project, projectBuilder));
+            NarDependencyUtils.prepareNarRequest(narRequest, project, projectBuilder);
 
             // get the dependency tree
-            final DependencyNode root = dependencyCollectorBuilder.collectDependencyGraph(narRequest, null);
+            final DependencyNode root = dependencyGraphBuilder.collectDependencyGraph(narRequest, null);
 
             DependencyNode narParent = root.getChildren()
                     .stream()
@@ -197,7 +190,7 @@ public class NarDuplicateDependenciesMojo extends AbstractMojo {
                 throw new MojoFailureException("Found duplicate dependencies");
             }
 
-        } catch (ProjectBuildingException | DependencyCollectorBuilderException e) {
+        } catch (ProjectBuildingException | DependencyGraphException e) {
             throw new MojoExecutionException("Cannot build project dependency tree", e);
         }
     }

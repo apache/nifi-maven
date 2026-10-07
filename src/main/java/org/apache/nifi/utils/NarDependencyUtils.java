@@ -16,6 +16,7 @@
  */
 package org.apache.nifi.utils;
 
+import org.apache.maven.RepositoryUtils;
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.handler.ArtifactHandler;
 import org.apache.maven.model.Dependency;
@@ -25,15 +26,26 @@ import org.apache.maven.project.ProjectBuilder;
 import org.apache.maven.project.ProjectBuildingException;
 import org.apache.maven.project.ProjectBuildingRequest;
 import org.apache.maven.project.ProjectBuildingResult;
+import org.eclipse.aether.DefaultRepositorySystemSession;
+import org.eclipse.aether.RepositorySystemSession;
+import org.eclipse.aether.artifact.ArtifactType;
+import org.eclipse.aether.artifact.ArtifactTypeRegistry;
 
-import java.util.HashMap;
-import java.util.Map;
 
 public class NarDependencyUtils {
     public static final String NAR = "nar";
     public static final String COMPILE_STRING = "compile";
 
-    public static Map<String, ArtifactHandler> createNarHandlerMap(ProjectBuildingRequest narRequest, MavenProject project, ProjectBuilder projectBuilder) throws ProjectBuildingException {
+    /**
+     * Builds the project of the NAR into the request, and gives the request a repository session in which the
+     * dependencies of NARs are listed.
+     *
+     * @param narRequest the request to build the project with and to prepare
+     * @param project the project of the NAR
+     * @param projectBuilder builds the project
+     * @throws ProjectBuildingException if the project cannot be built
+     */
+    public static void prepareNarRequest(ProjectBuildingRequest narRequest, MavenProject project, ProjectBuilder projectBuilder) throws ProjectBuildingException {
 
         final Artifact projectArtifact = project.getArtifact();
         final ProjectBuildingResult narResult = projectBuilder.build(projectArtifact, narRequest);
@@ -44,14 +56,17 @@ public class NarDependencyUtils {
         projectArtifact.setArtifactHandler(narHandler);
 
         // nar artifacts by nature includes dependencies, however this prevents the
-        // transitive dependencies from printing using tools like dependency:tree.
-        // here we are overriding the artifact handler for all nars so the
-        // dependencies can be listed. this is important because nar dependencies
-        // will be used as the parent classloader for this nar and seeing what
-        // dependencies are provided is critical.
-        final Map<String, ArtifactHandler> narHandlerMap = new HashMap<>();
-        narHandlerMap.put(NAR, narHandler);
-        return narHandlerMap;
+        // transitive dependencies from being resolved and listed. here we are
+        // overriding the artifact type of all nars, in a copy of the session used
+        // for this request only, so the dependencies can be listed. this is important
+        // because nar dependencies will be used as the parent classloader for this nar
+        // and seeing what dependencies are provided is critical.
+        final RepositorySystemSession session = narRequest.getRepositorySession();
+        final ArtifactTypeRegistry types = session.getArtifactTypeRegistry();
+        final ArtifactType narType = RepositoryUtils.newArtifactType(NAR, narHandler);
+        final DefaultRepositorySystemSession narSession = new DefaultRepositorySystemSession(session);
+        narSession.setArtifactTypeRegistry(id -> NAR.equals(id) ? narType : types.get(id));
+        narRequest.setRepositorySession(narSession);
     }
 
     public static void ensureSingleNarDependencyExists(MavenProject project) throws MojoExecutionException {

@@ -20,15 +20,16 @@ import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.DefaultArtifact;
 import org.apache.maven.artifact.handler.ArtifactHandler;
 import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
-import org.apache.maven.artifact.repository.ArtifactRepository;
-import org.apache.maven.artifact.resolver.ArtifactResolutionRequest;
-import org.apache.maven.artifact.resolver.ArtifactResolutionResult;
-import org.apache.maven.artifact.resolver.ArtifactResolver;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.ProjectBuilder;
-import org.apache.maven.shared.dependency.graph.DependencyGraphBuilder;
+import org.apache.nifi.dependency.DependencyGraphBuilder;
+import org.apache.maven.project.DefaultProjectBuildingRequest;
+import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
+import org.eclipse.aether.repository.RemoteRepository;
+import org.eclipse.aether.resolution.ArtifactRequest;
+import org.eclipse.aether.resolution.ArtifactResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -50,6 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -59,9 +61,8 @@ import static org.mockito.Mockito.when;
 class ExtensionClassLoaderFactoryTest {
 
     @Mock private Log log;
-    @Mock private ArtifactResolver artifactResolver;
-    @Mock private ArtifactRepository localRepository;
-    @Mock private ArtifactRepository remoteRepository;
+    @Mock private RepositorySystem repositorySystem;
+    private final RemoteRepository remoteRepository = new RemoteRepository.Builder("central", "default", "https://repo.example.org/maven2").build();
     @Mock private ArtifactHandlerManager artifactHandlerManager;
     @Mock private DependencyGraphBuilder dependencyGraphBuilder;
     @Mock private MavenProject project;
@@ -75,13 +76,14 @@ class ExtensionClassLoaderFactoryTest {
     private ExtensionClassLoaderFactory factory;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         artifact1 = projectArtifact();
         artifact2 = localRepositoryDependencyArtifact();
         artifact3 = remoteRepositoryDependencyArtifact();
 
-        when(artifactResolver.resolve(any(ArtifactResolutionRequest.class)))
-                .thenAnswer(args -> resolved(args.getArgument(0, ArtifactResolutionRequest.class).getArtifact()));
+        when(project.getRemoteProjectRepositories()).thenReturn(Collections.singletonList(remoteRepository));
+        when(repositorySystem.resolveArtifact(any(RepositorySystemSession.class), any(ArtifactRequest.class)))
+                .thenAnswer(args -> resolved(args.getArgument(1, ArtifactRequest.class)));
 
         factory = ExtensionClassLoaderFactory
                 .builder()
@@ -90,9 +92,8 @@ class ExtensionClassLoaderFactoryTest {
                 .projectBuilder(projectBuilder)
                 .dependencyGraphBuilder(dependencyGraphBuilder)
                 .artifactHandlerManager(artifactHandlerManager)
-                .artifactResolver(artifactResolver)
-                .localRepository(localRepository)
-                .remoteRepositories(Collections.singletonList(remoteRepository))
+                .repositorySystem(repositorySystem)
+                .projectBuildingRequest(new DefaultProjectBuildingRequest())
                 .repositorySession(repositorySession)
                 .build();
     }
@@ -114,32 +115,14 @@ class ExtensionClassLoaderFactoryTest {
         List<String> actualUrlsList = Arrays.stream(classLoader.getURLs()).map(URL::getFile).collect(Collectors.toList());
         assertTrue(expectedUrlsList.containsAll(actualUrlsList));
 
-        InOrder inOrder = inOrder(artifactResolver);
-        for (ArtifactResolutionRequest req : getExpectedArtifactResolutionRequests()) {
-            inOrder.verify(artifactResolver).resolve(argThat(arg ->
-                req.getArtifact().getArtifactId().equals(arg.getArtifact().getArtifactId())
-                        && req.getLocalRepository() == arg.getLocalRepository()
-                        && req.getRemoteRepositories().equals(arg.getRemoteRepositories())
+        InOrder inOrder = inOrder(repositorySystem);
+        for (Artifact expected : List.of(artifact2, artifact3)) {
+            inOrder.verify(repositorySystem).resolveArtifact(eq(repositorySession), argThat(arg ->
+                expected.getArtifactId().equals(arg.getArtifact().getArtifactId())
+                        && Collections.singletonList(remoteRepository).equals(arg.getRepositories())
             ));
         }
-        verifyNoMoreInteractions(artifactResolver);
-    }
-
-    private List<ArtifactResolutionRequest> getExpectedArtifactResolutionRequests() {
-        ArtifactResolutionRequest request1 = new ArtifactResolutionRequest();
-        request1.setArtifact(artifact2);
-        request1.setLocalRepository(localRepository);
-        request1.setRemoteRepositories(Collections.singletonList(remoteRepository));
-
-        ArtifactResolutionRequest request2 = new ArtifactResolutionRequest();
-        request2.setArtifact(artifact3);
-        request2.setLocalRepository(localRepository);
-        request2.setRemoteRepositories(Collections.singletonList(remoteRepository));
-
-        List<ArtifactResolutionRequest> resolutionRequests = new ArrayList<>();
-        resolutionRequests.add(request1);
-        resolutionRequests.add(request2);
-        return resolutionRequests;
+        verifyNoMoreInteractions(repositorySystem);
     }
 
     private Artifact projectArtifact() {
@@ -167,7 +150,6 @@ class ExtensionClassLoaderFactoryTest {
                 mock(ArtifactHandler.class)
         );
         artifact.setFile(null);
-        artifact.setRepository(localRepository);
         return artifact;
     }
 
@@ -182,23 +164,12 @@ class ExtensionClassLoaderFactoryTest {
                 mock(ArtifactHandler.class)
         );
         artifact.setFile(null);
-        artifact.setRepository(remoteRepository);
         return artifact;
     }
 
-    private ArtifactResolutionResult resolved(Artifact artifact) {
-        Artifact resolvedArtifact = new DefaultArtifact(
-                artifact.getGroupId(),
-                artifact.getArtifactId(),
-                artifact.getVersion(),
-                artifact.getScope(),
-                artifact.getType(),
-                artifact.getClassifier(),
-                artifact.getArtifactHandler()
-        );
-        resolvedArtifact.setFile(new File("/path/to/" + artifact.getArtifactId()));
-        ArtifactResolutionResult result = new ArtifactResolutionResult();
-        result.setArtifacts(Collections.singleton(resolvedArtifact));
+    private ArtifactResult resolved(ArtifactRequest request) {
+        ArtifactResult result = new ArtifactResult(request);
+        result.setArtifact(request.getArtifact().setFile(new File("/path/to/" + request.getArtifact().getArtifactId())));
         return result;
     }
 }

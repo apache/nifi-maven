@@ -16,19 +16,13 @@
  */
 package org.apache.nifi;
 
+import org.apache.maven.RepositoryUtils;
 import org.apache.maven.archiver.MavenArchiveConfiguration;
 import org.apache.maven.archiver.MavenArchiver;
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.DependencyResolutionRequiredException;
 import org.apache.maven.artifact.handler.ArtifactHandler;
 import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
-import org.apache.maven.artifact.installer.ArtifactInstaller;
-import org.apache.maven.artifact.repository.ArtifactRepository;
-import org.apache.maven.artifact.repository.ArtifactRepositoryFactory;
-import org.apache.maven.artifact.resolver.ArtifactResolutionRequest;
-import org.apache.maven.artifact.resolver.ArtifactResolutionResult;
-import org.apache.maven.artifact.resolver.ArtifactResolver;
-import org.apache.maven.artifact.resolver.DefaultArtifactResolver;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -45,7 +39,6 @@ import org.apache.maven.model.Dependency;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.MavenProjectHelper;
 import org.apache.maven.project.ProjectBuilder;
-import org.apache.maven.repository.RepositorySystem;
 import org.apache.maven.shared.artifact.filter.collection.ArtifactFilterException;
 import org.apache.maven.shared.artifact.filter.collection.ArtifactIdFilter;
 import org.apache.maven.shared.artifact.filter.collection.ArtifactsFilter;
@@ -55,7 +48,7 @@ import org.apache.maven.shared.artifact.filter.collection.GroupIdFilter;
 import org.apache.maven.shared.artifact.filter.collection.ProjectTransitivityFilter;
 import org.apache.maven.shared.artifact.filter.collection.ScopeFilter;
 import org.apache.maven.shared.artifact.filter.collection.TypeFilter;
-import org.apache.maven.shared.dependency.graph.DependencyGraphBuilder;
+import org.apache.nifi.dependency.DependencyGraphBuilder;
 import org.apache.maven.shared.transfer.artifact.ArtifactCoordinate;
 import org.apache.nifi.extension.definition.ExtensionDefinition;
 import org.apache.nifi.extension.definition.ExtensionType;
@@ -72,7 +65,10 @@ import org.codehaus.plexus.archiver.jar.ManifestException;
 import org.codehaus.plexus.archiver.manager.ArchiverManager;
 import org.codehaus.plexus.util.FileUtils;
 import org.codehaus.plexus.util.StringUtils;
+import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
+import org.eclipse.aether.resolution.ArtifactRequest;
+import org.eclipse.aether.resolution.ArtifactResolutionException;
 
 import javax.inject.Inject;
 import javax.inject.Named;
@@ -207,12 +203,6 @@ public class NarMojo extends AbstractMojo {
     @Parameter(property = "classifier")
     protected String classifier;
 
-    @Inject
-    protected ArtifactInstaller installer;
-
-    @Inject
-    protected ArtifactRepositoryFactory repositoryFactory;
-
     /**
      * This only applies if the classifier parameter is used.
      *
@@ -341,31 +331,10 @@ public class NarMojo extends AbstractMojo {
     protected File projectBuildDirectory;
 
     /**
-     * Used to look up Artifacts in the remote repository.
+     * Resolves artifacts from the local and the project's remote repositories.
      */
     @Inject
     protected RepositorySystem repositorySystem;
-
-    /**
-     * Used to look up Artifacts in the remote repository.
-     *
-     */
-    @Inject
-    protected ArtifactResolver resolver;
-
-    /**
-     * Location of the local repository.
-     *
-     */
-    @Parameter(property = "localRepository", required = true, readonly = true)
-    protected ArtifactRepository local;
-
-    /**
-     * List of Remote Repositories used by the resolver
-     *
-     */
-    @Parameter(property = "project.remoteArtifactRepositories", required = true, readonly = true)
-    protected List<ArtifactRepository> remoteRepos;
 
     /**
      * To look up Archiver/UnArchiver implementations
@@ -389,7 +358,7 @@ public class NarMojo extends AbstractMojo {
     public boolean silent;
 
     /**
-     * The dependency tree builder to use for verbose output.
+     * Builds the dependency graph of the project, from which the class loaders for extension documentation are created.
      */
     @Inject
     private DependencyGraphBuilder dependencyGraphBuilder;
@@ -981,10 +950,9 @@ public class NarMojo extends AbstractMojo {
 
     private ExtensionClassLoaderFactory createClassLoaderFactory() {
         return new ExtensionClassLoaderFactory.Builder()
-                .artifactResolver(resolver)
+                .repositorySystem(repositorySystem)
                 .dependencyGraphBuilder(dependencyGraphBuilder)
-                .localRepository(local)
-                .remoteRepositories(remoteRepos)
+                .projectBuildingRequest(session.getProjectBuildingRequest())
                 .log(getLog())
                 .project(project)
                 .projectBuilder(projectBuilder)
@@ -1032,20 +1000,6 @@ public class NarMojo extends AbstractMojo {
                 artifact);
         final File destFile = new File(destDir, destFileName);
         copyFile(artifact.getFile(), destFile);
-    }
-
-    protected Artifact getResolvedPomArtifact(Artifact artifact) {
-        Artifact pomArtifact = this.repositorySystem.createArtifact(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion(), "pom");
-        // Resolve the pom artifact using repos
-        ArtifactResolutionRequest artifactResolutionRequest = getArtifactResolutionRequest(pomArtifact);
-        ArtifactResolutionResult artifactResolutionResult = this.resolver.resolve(artifactResolutionRequest);
-        if (artifactResolutionResult.hasExceptions()) {
-            getLog().info("Could not resolve [" + pomArtifact + "]");
-            for (Exception e : artifactResolutionResult.getExceptions()){
-                getLog().info(e.getMessage());
-            }
-        }
-        return pomArtifact;
     }
 
     protected ArtifactsFilter getMarkedArtifactFilter() {
@@ -1124,12 +1078,12 @@ public class NarMojo extends AbstractMojo {
             unResolvedArtifacts.addAll(artifacts);
 
             // resolve the rest of the artifacts
-            ArtifactResolver artifactResolver = new DefaultArtifactResolver();
             for (Artifact artifact : artifacts) {
-                ArtifactResolutionRequest req = getArtifactResolutionRequest(artifact);
-                ArtifactResolutionResult result = artifactResolver.resolve(req);
-                if (result.getArtifacts() != null) {
-                    unResolvedArtifacts.removeAll(result.getArtifacts());
+                try {
+                    repositorySystem.resolveArtifact(repoSession, new ArtifactRequest(RepositoryUtils.toArtifact(artifact), project.getRemoteProjectRepositories(), null));
+                    unResolvedArtifacts.remove(artifact);
+                } catch (final ArtifactResolutionException e) {
+                    getLog().debug("Could not resolve " + artifact, e);
                 }
             }
         }
@@ -1293,14 +1247,6 @@ public class NarMojo extends AbstractMojo {
             return excludes;
         }
         return DEFAULT_EXCLUDES;
-    }
-
-    private ArtifactResolutionRequest getArtifactResolutionRequest(Artifact artifact) {
-        ArtifactResolutionRequest request = new ArtifactResolutionRequest();
-        request.setRemoteRepositories(this.remoteRepos);
-        request.setLocalRepository(this.local);
-        request.setArtifact(artifact);
-        return request;
     }
 
     protected File getNarFile(File basedir, String finalName, String classifier) {

@@ -18,7 +18,6 @@ package org.apache.nifi;
 
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.handler.ArtifactHandler;
-import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -31,10 +30,10 @@ import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.ProjectBuilder;
 import org.apache.maven.project.ProjectBuildingException;
 import org.apache.maven.project.ProjectBuildingRequest;
-import org.apache.maven.shared.dependency.graph.DependencyGraphBuilder;
-import org.apache.maven.shared.dependency.graph.DependencyGraphBuilderException;
-import org.apache.maven.shared.dependency.graph.DependencyNode;
-import org.apache.maven.shared.dependency.graph.traversal.DependencyNodeVisitor;
+import org.apache.nifi.dependency.DependencyGraphBuilder;
+import org.apache.nifi.dependency.DependencyGraphException;
+import org.apache.nifi.dependency.DependencyNode;
+import org.apache.nifi.dependency.DependencyNodeVisitor;
 import org.apache.nifi.utils.NarDependencyUtils;
 import org.eclipse.aether.RepositorySystemSession;
 
@@ -70,17 +69,11 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
     private String mode;
 
     /**
-     * The dependency tree builder to use for verbose output.
+     * Builds the dependency graph from which the provided dependencies are listed.
      */
     @Inject
     private DependencyGraphBuilder dependencyGraphBuilder;
 
-    /**
-     * *
-     * The {@link ArtifactHandlerManager} into which any extension {@link ArtifactHandler} instances should have been injected when the extensions were loaded.
-     */
-    @Inject
-    private ArtifactHandlerManager artifactHandlerManager;
 
     /**
      * The {@link ProjectBuilder} used to generate the {@code MavenProject} for the nar artifact the dependency tree is being generated for.
@@ -100,7 +93,7 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
             narRequest.setRepositorySession(repoSession);
             narRequest.setSystemProperties(System.getProperties());
 
-            artifactHandlerManager.addHandlers(NarDependencyUtils.createNarHandlerMap(narRequest, project, projectBuilder));
+            NarDependencyUtils.prepareNarRequest(narRequest, project, projectBuilder);
 
             // get the dependency tree
             final DependencyNode root = dependencyGraphBuilder.buildDependencyGraph(narRequest, null);
@@ -121,7 +114,7 @@ public class NarProvidedDependenciesMojo extends AbstractMojo {
             // visit and print the results
             root.accept(visitor);
             getLog().info("--- Provided NAR Dependencies ---" + System.lineSeparator() + System.lineSeparator() + visitor);
-        } catch (ProjectBuildingException | DependencyGraphBuilderException e) {
+        } catch (ProjectBuildingException | DependencyGraphException e) {
             throw new MojoExecutionException("Cannot build project dependency tree", e);
         }
     }
